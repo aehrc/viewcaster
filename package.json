@@ -1,7 +1,7 @@
 {
-  "name": "sof-mssql",
-  "version": "2.4.0",
-  "description": "A SQL on FHIR view runner that transpiles view definitions into T-SQL queries for MS SQL Server",
+  "name": "sof-oracle",
+  "version": "0.1.0",
+  "description": "A SQL on FHIR view runner that transpiles view definitions into SQL queries for Oracle Database",
   "author": "Australian e-Health Research Centre, CSIRO",
   "contributors": [
     {
@@ -13,7 +13,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "sof-mssql": "./dist/cli.js"
+    "sof-oracle": "./dist/cli.js"
   },
   "scripts": {
     "antlr": "antlr4ts -visitor grammar/fhirpath.g4 -o src/generated",
@@ -33,17 +33,17 @@
   "keywords": [
     "fhir",
     "sql-on-fhir",
-    "mssql",
-    "tsql",
+    "oracle",
+    "oracle-database",
     "healthcare"
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/aehrc/sof-mssql.git"
+    "url": "https://github.com/aehrc/sof-oracle.git"
   },
-  "homepage": "https://github.com/aehrc/sof-mssql#readme",
+  "homepage": "https://github.com/aehrc/sof-oracle#readme",
   "bugs": {
-    "url": "https://github.com/aehrc/sof-mssql/issues"
+    "url": "https://github.com/aehrc/sof-oracle/issues"
   },
   "files": [
     "dist/",
@@ -55,10 +55,9 @@
     "antlr4ts": "^0.5.0-alpha.4",
     "commander": "^14.0.1",
     "fhirpath": "^3.15.1",
-    "mssql": "^11.0.1"
+    "oracledb": "^7.0.1"
   },
   "devDependencies": {
-    "@types/mssql": "^9.1.7",
     "@types/node": "^22.5.5",
     "@typescript-eslint/eslint-plugin": "^8.8.0",
     "@typescript-eslint/parser": "^8.8.0",
@@ -73,6 +72,6 @@
     "vitest": "^3.2.4"
   },
   "engines": {
-    "node": ">=18.0.0"
+    "node": ">=20.0.0"
   }
 }
