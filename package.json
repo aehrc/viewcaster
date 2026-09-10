@@ -16,7 +16,7 @@
     "sof-oracle": "./dist/cli.js"
   },
   "scripts": {
-    "antlr": "antlr4ts -visitor grammar/fhirpath.g4 -o src/generated",
+    "antlr": "node scripts/antlr.mjs",
     "build": "tsc -p tsconfig.build.json",
     "cli": "tsx src/cli.ts",
     "cli:load": "tsx src/cli.ts load",
