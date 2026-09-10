@@ -27,7 +27,10 @@
  * dataset on a shared development instance is never touched.
  */
 
-import { stringify as losslessStringify } from "lossless-json";
+import {
+  LosslessNumber,
+  stringify as losslessStringify,
+} from "lossless-json";
 import oracledb from "oracledb";
 
 /**
@@ -162,6 +165,27 @@ export async function dropTestTable(
     }
   }
 }
+/**
+ * Converts a lossless-json parsed object into plain JSON for a `DB_TYPE_JSON`
+ * bind. `LosslessNumber` instances would otherwise be serialised as nested
+ * objects (`{"value":"1.2","isLosslessNumber":true}`), corrupting every
+ * numeric field in the stored resource.
+ * @param value - Arbitrary parsed JSON value.
+ * @returns A structurally equal object with plain numbers.
+ */
+function toPlainJson(value: unknown): unknown {
+  if (value instanceof LosslessNumber) return Number(value.value);
+  if (Array.isArray(value)) return value.map(toPlainJson);
+  if (value !== null && typeof value === "object") {
+    return Object.fromEntries(
+      Object.entries(value as Record<string, unknown>).map(([key, entry]) => [
+        key,
+        toPlainJson(entry),
+      ]),
+    );
+  }
+  return value;
+}
 
 /**
  * Inserts FHIR resources into the test table with a single batched statement
@@ -189,7 +213,10 @@ export async function insertTestResources(
   }
   const rows =
     storageType === "JSON"
-      ? resources.map((resource) => [resource.resourceType, resource])
+      ? resources.map((resource) => [
+          resource.resourceType,
+          { type: oracledb.DB_TYPE_JSON, val: toPlainJson(resource) },
+        ])
       : resources.map((resource) => [
           resource.resourceType,
           Buffer.from(losslessStringify(resource) ?? "null", "utf8"),
@@ -236,9 +263,11 @@ export async function insertTestResourceReturningId(
   storageType: StorageType,
   tableName: string = TEST_TABLE_NAME,
 ): Promise<number> {
+  // Native JSON storage needs a typed bind: a raw JS object passed as a
+  // positional value fails with NJS-044 ("bind object must contain ... val").
   const json =
     storageType === "JSON"
-      ? resource
+      ? { type: oracledb.DB_TYPE_JSON, val: toPlainJson(resource) }
       : Buffer.from(losslessStringify(resource) ?? "null", "utf8");
   const result = await connection.execute(
     `INSERT INTO ${tableName} (resource_type, test_id, json) VALUES (:1, :2, :3) RETURNING id INTO :4`,
