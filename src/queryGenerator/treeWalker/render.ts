@@ -71,7 +71,12 @@ export function renderRoot(
 
   const cteSection =
     fragment.ctes.length > 0
-      ? `WITH\n${fragment.ctes.map((c) => `${c.alias} AS (\n${c.body}\n)`).join(",\n")}\n`
+      ? `WITH\n${fragment.ctes
+          .map(
+            (c) =>
+              `${c.alias}${c.columnList ? ` (${c.columnList})` : ""} AS (\n${c.body}\n)${c.cycleClause ? ` ${c.cycleClause}` : ""}`,
+          )
+          .join(",\n")}\n`
       : "";
 
   const fromClause = `FROM ${tableRef} ${resourceAlias}`;

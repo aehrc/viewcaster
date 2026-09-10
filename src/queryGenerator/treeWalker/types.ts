@@ -37,6 +37,17 @@ export interface CteDefinition {
   alias: string;
   /** Full SQL body without the "alias AS (...)" wrapper. */
   body: string;
+  /**
+   * Column alias list, required for recursive (repeat) CTEs on Oracle
+   * (ORA-32039); rendered as `alias (cols) AS (...)` when present.
+   */
+  columnList?: string;
+  /**
+   * CYCLE clause text, rendered directly after the CTE's closing paren.
+   * Oracle's implicit whole-row cycle detection mis-fires on CLOB columns,
+   * so repeat CTEs declare the identity columns explicitly (research R4).
+   */
+  cycleClause?: string;
 }
 
 export interface Context {

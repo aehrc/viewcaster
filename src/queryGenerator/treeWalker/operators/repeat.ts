@@ -1,7 +1,7 @@
 /**
  * Walker for Repeat nodes - emits a recursive CTE and returns a set Fragment.
  *
- * The CTE projects the current partition keys and a content-derived `__path`
+ * The CTE projects the current partition keys and a content-derived `elem_path`
  * for stable identity across re-evaluations. The Fragment's `fromExtensions`
  * is an INNER JOIN to the CTE on the partition keys; sibling-level
  * composite-key joins are added by `mergeSiblings`.
@@ -30,7 +30,7 @@ export interface RepeatDeps {
  * Generates a `WITH RECURSIVE`-style CTE (via `buildRepeatCte`) whose anchor
  * member starts at the resource root and whose recursive members re-expand
  * each element's `item_json` using the same path list.  The CTE accumulates a
- * `__path` string for stable per-element identity across recursion levels.
+ * `elem_path` string for stable per-element identity across recursion levels.
  *
  * The returned Fragment contains the CTE plus an `INNER JOIN` to it in
  * `fromExtensions`; the join is keyed on all current partition keys so that
@@ -112,11 +112,11 @@ function buildRepeatInnerCtx(
 ): Context {
   const newKey: PartitionKey = {
     name: `${cteAlias}_path`,
-    sqlExpr: `${cteAlias}.__path`,
+    sqlExpr: `${cteAlias}.elem_path`,
     sqlType: "VARCHAR2(4000)",
   };
   // `%rowIndex` inside a repeat is the 0-based position within the flattened
-  // depth-first traversal. The CTE exposes a padded `__order` accumulator whose
+  // depth-first traversal. The CTE exposes a padded `elem_order` accumulator whose
   // lexical order matches pre-order; ROW_NUMBER over it (less one) yields the
   // index. Partitioning on the ancestor keys captured before the repeat key is
   // appended (the resource, and any enclosing forEach element) restarts the
@@ -130,7 +130,7 @@ function buildRepeatInnerCtx(
     currentForEachAlias: cteAlias,
     forEachSource: ctx.source,
     forEachPath: paths.map((p) => `$.${p}`).join(", "),
-    rowIndexExpr: `(ROW_NUMBER() OVER (${partitionClause}ORDER BY ${cteAlias}.__order) - 1)`,
+    rowIndexExpr: `(ROW_NUMBER() OVER (${partitionClause}ORDER BY ${cteAlias}.elem_order) - 1)`,
   };
   // Propagate the join into ancestorApplies so any *nested* Repeat builds
   // its CTE anchor with this CTE in scope.

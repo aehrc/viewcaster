@@ -22,7 +22,7 @@
  *
  * The Oracle form unrolls each level with a chained CROSS APPLY JSON_TABLE
  * (sources after the first wrapped in JSON_QUERY, per the ORA-40556 spike
- * finding) instead of OPENJSON. The `__order` accumulator uses LPAD over the
+ * finding) instead of OPENJSON. The `elem_order` accumulator uses LPAD over the
  * FOR ORDINALITY column so lexical ordering matches depth-first (pre-order)
  * traversal.
  */
@@ -58,7 +58,7 @@ export interface BuildRepeatCteArgs {
  * `UNION ALL` recursive SELECT per path in `args.paths`. The anchor starts
  * at the resource root and expands each array element via `JSON_TABLE`; each
  * recursive member re-expands from the CTE's own `item_json` column, appending
- * the element index to the `__path` accumulator for stable per-element
+ * the element index to the `elem_path` accumulator for stable per-element
  * identity. Multi-segment paths (e.g. `"a.b.c"`) produce a chain of nested
  * `CROSS APPLY JSON_TABLE` calls.
  *
@@ -73,7 +73,14 @@ export function buildRepeatCte(args: BuildRepeatCteArgs): CteDefinition {
   const body = `${anchor}
   UNION ALL
 ${recBlocks.join("\n  UNION ALL\n")}`;
-  return { alias: args.cteAlias, body };
+  const columnList = args.partitionKeys
+    .map((k) => k.name)
+    .concat("elem_path", "elem_order", "item_json", "item_scalar", "cyc", "depth")
+    .join(", ");
+  const cycleClause = `CYCLE ${args.partitionKeys
+    .map((k) => `${args.cteAlias}.${k.name}`)
+    .join(", ")}, ${args.cteAlias}.elem_path SET cyc TO '1' DEFAULT '0'`;
+  return { alias: args.cteAlias, body, columnList, cycleClause };
 }
 
 function buildAnchorMember(args: BuildRepeatCteArgs): string {
@@ -94,10 +101,11 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
 
   return `  SELECT
     ${projLines},
-    CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS __path,
-    ${orderSegment(chain.lastAlias)} AS __order,
+    CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS elem_path,
+    ${orderSegment(chain.lastAlias)} AS elem_order,
     ${chain.lastAlias}.value AS item_json,
     ${chain.lastAlias}.scalar AS item_scalar,
+    '0' AS cyc,
     0 AS depth
   ${fromClause}${ancestorApplies}
   ${chain.applyClauses}${wherePart}`;
@@ -118,24 +126,25 @@ function buildRecursiveMember(
   );
   return `  SELECT
     ${head},
-    cte.__path || '.' || CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS __path,
-    cte.__order || '.' || ${orderSegment(chain.lastAlias)} AS __order,
+    cte.elem_path || '.' || CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS elem_path,
+    cte.elem_order || '.' || ${orderSegment(chain.lastAlias)} AS elem_order,
     ${chain.lastAlias}.value AS item_json,
     ${chain.lastAlias}.scalar AS item_scalar,
+    '0' AS cyc,
     cte.depth + 1
   FROM ${cteAlias} cte
   ${chain.applyClauses}`;
 }
 
 /**
- * Width, in characters, that each `__order` segment is zero-padded to. A level
+ * Width, in characters, that each `elem_order` segment is zero-padded to. A level
  * with up to 10^ORDER_SEGMENT_WIDTH elements still sorts correctly; ten digits
  * assume no single level exceeds 10^10 elements.
  */
 const ORDER_SEGMENT_WIDTH = 10;
 
 /**
- * Builds one segment of the `__order` accumulator: the element's ordinality
+ * Builds one segment of the `elem_order` accumulator: the element's ordinality
  * zero-padded to a fixed width so that lexical ordering of the `.`-joined
  * order string is equivalent to numeric depth-first (pre-order) traversal.
  * This is what `%rowIndex` orders by inside a `repeat`.
