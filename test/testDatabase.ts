@@ -197,6 +197,8 @@ function toPlainJson(value: unknown): unknown {
  * @param resources - FHIR resources; each must carry `resourceType`.
  * @param storageType - JSON column storage variant of the target table.
  * @param tableName - Table name; defaults to {@link TEST_TABLE_NAME}.
+ * @param testId - Test-isolation identifier stored with each row; defaults
+ *   to `spike`, matching the tables created for the behaviour spike.
  * @returns The number of rows inserted.
  */
 export async function insertTestResources(
@@ -204,6 +206,7 @@ export async function insertTestResources(
   resources: ReadonlyArray<{ resourceType: string }>,
   storageType: StorageType,
   tableName: string = TEST_TABLE_NAME,
+  testId: string = "spike",
 ): Promise<number> {
   if (resources.length === 0) {
     return 0;
@@ -212,19 +215,25 @@ export async function insertTestResources(
     storageType === "JSON"
       ? resources.map((resource) => [
           resource.resourceType,
-          { type: oracledb.DB_TYPE_JSON, val: toPlainJson(resource) },
+          testId,
+          // With bindDefs present the row value is the value itself: a
+          // `{ type, val }` wrapper here would be serialised as the JSON
+          // document. `toPlainJson` is still needed for lossless numbers.
+          toPlainJson(resource),
         ])
       : resources.map((resource) => [
           resource.resourceType,
+          testId,
           Buffer.from(losslessStringify(resource) ?? "null", "utf8"),
         ]);
   const result = await connection.executeMany(
-    `INSERT INTO ${tableName} (resource_type, json) VALUES (:1, :2)`,
+    `INSERT INTO ${tableName} (resource_type, test_id, json) VALUES (:1, :2, :3)`,
     rows,
     {
       autoCommit: true,
       bindDefs: [
         { type: oracledb.DB_TYPE_VARCHAR, maxSize: 64 },
+        { type: oracledb.DB_TYPE_VARCHAR, maxSize: 255 },
         {
           type:
             storageType === "JSON"

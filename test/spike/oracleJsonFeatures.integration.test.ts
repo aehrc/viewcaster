@@ -136,7 +136,13 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       }
       await dropTestTable(connection, table);
       await createTestTable(connection, storageType, table);
-      await insertTestResources(connection, RESOURCES, storageType, table);
+      await insertTestResources(
+        connection,
+        RESOURCES,
+        storageType,
+        table,
+        "spike",
+      );
     });
 
     afterAll(async () => {
