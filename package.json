@@ -1,0 +1,78 @@
+{
+  "name": "sof-mssql",
+  "version": "2.4.0",
+  "description": "A SQL on FHIR view runner that transpiles view definitions into T-SQL queries for MS SQL Server",
+  "author": "Australian e-Health Research Centre, CSIRO",
+  "contributors": [
+    {
+      "name": "John Grimes",
+      "email": "John.Grimes@csiro.au",
+      "url": "https://people.csiro.au/G/J/john-grimes"
+    }
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "bin": {
+    "sof-mssql": "./dist/cli.js"
+  },
+  "scripts": {
+    "antlr": "antlr4ts -visitor grammar/fhirpath.g4 -o src/generated",
+    "build": "tsc",
+    "cli": "tsx src/cli.ts",
+    "cli:load": "tsx src/cli.ts load",
+    "cli:transpile": "tsx src/cli.ts transpile",
+    "test": "vitest run",
+    "test:coverage": "vitest run --coverage",
+    "test:watch": "vitest",
+    "test:ui": "vitest --ui",
+    "coverage": "vitest run --coverage",
+    "lint": "eslint",
+    "format": "prettier --write \"src/**/*.(ts|json|yml)\" \".github/**/*.(ts|json|yml)\"",
+    "format:check": "prettier --check \"src/**/*.(ts|json|yml)\" \".github/**/*.(ts|json|yml)\""
+  },
+  "keywords": [
+    "fhir",
+    "sql-on-fhir",
+    "mssql",
+    "tsql",
+    "healthcare"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/aehrc/sof-mssql.git"
+  },
+  "homepage": "https://github.com/aehrc/sof-mssql#readme",
+  "bugs": {
+    "url": "https://github.com/aehrc/sof-mssql/issues"
+  },
+  "files": [
+    "dist/",
+    "LICENSE",
+    "README.md"
+  ],
+  "license": "Apache-2.0",
+  "dependencies": {
+    "antlr4ts": "^0.5.0-alpha.4",
+    "commander": "^14.0.1",
+    "fhirpath": "^3.15.1",
+    "mssql": "^11.0.1"
+  },
+  "devDependencies": {
+    "@types/mssql": "^9.1.7",
+    "@types/node": "^22.5.5",
+    "@typescript-eslint/eslint-plugin": "^8.8.0",
+    "@typescript-eslint/parser": "^8.8.0",
+    "@vitest/coverage-v8": "^3.2.4",
+    "@vitest/ui": "^3.2.4",
+    "antlr4ts-cli": "^0.5.0-alpha.4",
+    "eslint": "^9.11.1",
+    "lossless-json": "^4.3.0",
+    "prettier": "^3.6.2",
+    "tsx": "^4.20.6",
+    "typescript": "^5.6.2",
+    "vitest": "^3.2.4"
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  }
+}
