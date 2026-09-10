@@ -1,16 +1,7 @@
 {
   "threshold": 1,
-  "reporters": [
-    "console"
-  ],
-  "path": [
-    "src",
-    "test"
-  ],
-  "ignore": [
-    "**/node_modules/**",
-    "**/*.test.ts",
-    "**/src/generated/**"
-  ],
+  "reporters": ["console"],
+  "path": ["src", "test"],
+  "ignore": ["**/node_modules/**", "**/*.test.ts", "**/src/generated/**"],
   "absolute": true
 }
