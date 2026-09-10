@@ -141,7 +141,7 @@ function buildRecursiveMember(args: BuildRepeatCteArgs): string {
     .map(
       (path) =>
         `      SELECT child.value AS v, child.idx AS idx, child.scalar AS scalar
-        FROM JSON_TABLE(cte.item_json${fmt}, '$.${path}[*]' COLUMNS (idx FOR ORDINALITY, value CLOB${fmt} PATH '$', scalar VARCHAR2(4000) PATH '$')) child`,
+        FROM JSON_TABLE(cte.item_json${fmt}, '$.${path}[*]' COLUMNS (idx FOR ORDINALITY, value CLOB FORMAT JSON PATH '$', scalar VARCHAR2(4000) PATH '$')) child`,
     )
     .join("\n      UNION ALL\n");
   return `  SELECT
@@ -208,7 +208,7 @@ function buildJsonTableChain(
 ): { applyClauses: string; lastAlias: string } {
   const segments = path.split(".");
   const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
-  const columns = jsonTableColumns(storage);
+  const columns = jsonTableColumns();
 
   // A JSON_TABLE-produced column (an APPLY alias's `value`, or a repeat CTE's
   // `item_json`) cannot be consumed directly by another JSON_TABLE

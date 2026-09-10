@@ -210,7 +210,7 @@ export class ColumnExpressionGenerator {
     const fmt = formatJsonSuffix(storage);
     const jsonColumn = context.resourceJsonColumn ?? "json";
     return `(SELECT CASE WHEN COUNT(n.scalar) = 0 THEN JSON_QUERY('[]' FORMAT JSON, '$') ELSE JSON_ARRAYAGG(n.scalar ORDER BY p.idx, n.idx) END
-      FROM JSON_TABLE(${context.resourceAlias}.${jsonColumn}${fmt}, '$.name[*]' COLUMNS (idx FOR ORDINALITY, value CLOB${fmt} PATH '$')) p
+      FROM JSON_TABLE(${context.resourceAlias}.${jsonColumn}${fmt}, '$.name[*]' COLUMNS (idx FOR ORDINALITY, value CLOB FORMAT JSON PATH '$')) p
       CROSS APPLY JSON_TABLE(JSON_QUERY(p.value${fmt}, '$.given' RETURNING CLOB), '$[*]' COLUMNS (idx FOR ORDINALITY, scalar VARCHAR2(4000) PATH '$')) n)`;
   }
 }

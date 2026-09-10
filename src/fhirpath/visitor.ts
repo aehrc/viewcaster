@@ -60,14 +60,14 @@ import { fhirpathVisitor } from "../generated/grammar/fhirpathVisitor";
 
 /**
  * JSON_TABLE column list for iterating an array. `value` carries the whole
- * element (CLOB, marked FORMAT JSON in BLOB mode so downstream JSON functions
- * accept it); `scalar` carries it as text.
- * @param storage - The targeted JSON storage type.
+ * element as a CLOB marked FORMAT JSON, so downstream JSON functions accept
+ * it in both BLOB and native JSON storage (on a native JSON column,
+ * JSON_VALUE over an unmarked CLOB column returns NULL); `scalar` carries
+ * the element as text.
  * @returns The COLUMNS clause text.
  */
-export function jsonTableColumns(storage: "BLOB" | "JSON"): string {
-  const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
-  return `idx FOR ORDINALITY, value CLOB${fmt} PATH '$', scalar VARCHAR2(4000) PATH '$'`;
+export function jsonTableColumns(): string {
+  return `idx FOR ORDINALITY, value CLOB FORMAT JSON PATH '$', scalar VARCHAR2(4000) PATH '$'`;
 }
 
 /**
@@ -1424,7 +1424,7 @@ export class FHIRPathToOracleVisitor
     // Return a subquery that selects the filtered collection. ROWNUM limits
     // the result to the first match without FETCH FIRST, which mis-correlates
     // in APPLY contexts on 19c (research R4).
-    return `(SELECT value FROM JSON_TABLE(${source}${fmt}, '${unrolledPath}' COLUMNS (${jsonTableColumns(this.storage)})) ${tableAlias} WHERE ${condition} AND ROWNUM = 1)`;
+    return `(SELECT value FROM JSON_TABLE(${source}${fmt}, '${unrolledPath}' COLUMNS (${jsonTableColumns()})) ${tableAlias} WHERE ${condition} AND ROWNUM = 1)`;
   }
 
   /**
@@ -1712,7 +1712,7 @@ export class FHIRPathToOracleVisitor
     const filterVisitor = new FHIRPathToOracleVisitor(itemContext);
     const condition = filterVisitor.visit(filterExprCtx);
 
-    return `EXISTS (SELECT 1 FROM JSON_TABLE(${source}${fmt}, '${this.unrollPath(jsonPath)}' COLUMNS (${jsonTableColumns(this.storage)})) ${tableAlias} WHERE ${condition})`;
+    return `EXISTS (SELECT 1 FROM JSON_TABLE(${source}${fmt}, '${this.unrollPath(jsonPath)}' COLUMNS (${jsonTableColumns()})) ${tableAlias} WHERE ${condition})`;
   }
 
   /**
@@ -1855,7 +1855,7 @@ export class FHIRPathToOracleVisitor
       // The NVL keeps a present-but-null element contributing an empty string
       // so it does not nullify the whole result.
       return `(SELECT LISTAGG(NVL(child.value, ''), ${separator}) WITHIN GROUP (ORDER BY parent.idx, child.idx)
-        FROM JSON_TABLE(${source}${fmt}, '${parentPath}[*]' COLUMNS (idx FOR ORDINALITY, value CLOB${fmt} PATH '$')) parent
+        FROM JSON_TABLE(${source}${fmt}, '${parentPath}[*]' COLUMNS (idx FOR ORDINALITY, value CLOB FORMAT JSON PATH '$')) parent
         CROSS APPLY JSON_TABLE(JSON_QUERY(parent.value${fmt}, '$.${childField}' RETURNING CLOB), '$[*]' COLUMNS (idx FOR ORDINALITY, value VARCHAR2(4000) PATH '$', scalar VARCHAR2(4000) PATH '$')) child)`;
     }
 
@@ -1993,11 +1993,11 @@ export class FHIRPathToOracleVisitor
     if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
       const fromPart = base.slice(Math.max(0, base.indexOf(" FROM ")));
       const nestedSource = `(SELECT JSON_QUERY(value, '$.extension' RETURNING CLOB)${fromPart}`;
-      return `(SELECT value FROM JSON_TABLE(${nestedSource}${fmt}, '$[*]' COLUMNS (${jsonTableColumns(this.storage)})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
+      return `(SELECT value FROM JSON_TABLE(${nestedSource}${fmt}, '$[*]' COLUMNS (${jsonTableColumns()})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
     }
 
     // Generate SQL that filters the extension array by URL
-    return `(SELECT value FROM JSON_TABLE(${base}${fmt}, '$.extension[*]' COLUMNS (${jsonTableColumns(this.storage)})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
+    return `(SELECT value FROM JSON_TABLE(${base}${fmt}, '$.extension[*]' COLUMNS (${jsonTableColumns()})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
   }
 
   /**
