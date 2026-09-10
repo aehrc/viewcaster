@@ -185,8 +185,32 @@ export class FHIRPathToOracleVisitor
     const base = this.visit(ctx.expression(0));
     const index = this.visit(ctx.expression(1));
 
-    // Generate JSON path with array index
-    if (base.includes("JSON_VALUE")) {
+    // Filtered-collection subqueries from where()/extension() select only
+    // the first matching element (ROWNUM = 1), so [0] is the subquery itself
+    // and any other index cannot be represented.
+    if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
+      if (index !== "0") {
+        throw new Error(
+          `Indexing beyond the first element of a filtered collection is not supported: [${index}]`,
+        );
+      }
+      return base;
+    }
+
+    // A where() subquery that already selects a field: splice the index into
+    // the field path (name.where(...).given[0] -> '$.given[0]'), keeping the
+    // subquery's FROM and WHERE sections intact.
+    const fieldSubquery =
+      /^\(SELECT JSON_VALUE\(value, '\$\.([^']+)'\) FROM JSON_TABLE/.exec(base);
+    if (fieldSubquery) {
+      const rest = base.slice(Math.max(0, base.indexOf(" FROM ")));
+      return `(SELECT JSON_VALUE(value, '$.${fieldSubquery[1]}[${index}]')${rest}`;
+    }
+
+    // Generate JSON path with array index. Parenthesised subqueries must not
+    // enter this branch: the regex would match a JSON_VALUE inside the
+    // subquery (e.g. the where condition) and re-target the wrong fragment.
+    if (!base.startsWith("(") && base.includes("JSON_VALUE")) {
       const pathMatch = /JSON_VALUE\(([^,]+),\s*'([^']+)'\)/.exec(base);
       if (pathMatch) {
         const source = pathMatch[1];
@@ -195,7 +219,14 @@ export class FHIRPathToOracleVisitor
       }
     }
 
-    return `JSON_VALUE(${base}, '$[${index}]')`;
+    // A JSON_QUERY extracting an array: index the extracted array text.
+    if (base.startsWith("JSON_QUERY(")) {
+      return `JSON_VALUE(${base}, '$[${index}]')`;
+    }
+
+    throw new Error(
+      `Array indexing is not supported on this expression: [${index}] of ${base.slice(0, 80)}`,
+    );
   }
 
   /**
