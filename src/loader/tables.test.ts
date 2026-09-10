@@ -1,169 +1,175 @@
-/**
- * Unit tests for pure table DDL generation and existing-column-type resolution.
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
  *
- * These exercise the string-building and comparison logic without a database,
- * so the byte-for-byte DDL contract (SC-001), the native JSON column type
- * (FR-005) and the type-mismatch decision (FR-008) can be verified in
- * isolation.
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
  *
  * @author John Grimes
  */
 
+/**
+ * Unit tests for pure table DDL generation, existing-column-type resolution,
+ * storage-type mismatch warnings and the native-JSON version gate
+ * (FR-011/FR-014, data-model.md lifecycle rules).
+ *
+ * These exercise the string-building and comparison logic without a database,
+ * so the DDL contract, the storage variants and the fail-fast decisions can be
+ * verified in isolation.
+ */
+
 import { describe, expect, it } from "vitest";
 import {
+  assertNativeJsonSupported,
   buildCreateTableStatements,
   buildJsonTypeMismatchWarning,
   resolveColumnJsonDataType,
 } from "./tables";
 
 describe("buildCreateTableStatements", () => {
-  describe("default NVARCHAR(MAX) json column", () => {
+  describe("default BLOB json column (19c+)", () => {
     const statements = buildCreateTableStatements(
-      "dbo",
+      undefined,
       "fhir_resources",
-      "NVARCHAR(MAX)",
+      "BLOB",
     );
 
-    it("types the json column as NVARCHAR(MAX) NOT NULL", () => {
-      expect(statements.createTable).toContain("[json] NVARCHAR(MAX) NOT NULL");
+    it("types the json column as BLOB NOT NULL with the IS JSON check", () => {
+      expect(statements.createTable).toContain(
+        "json          BLOB NOT NULL CHECK (json IS JSON)",
+      );
     });
 
-    it("keeps the id column unchanged", () => {
+    it("creates the surrogate id as an identity column", () => {
       expect(statements.createTable).toContain(
-        "[id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY",
+        "id            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY",
       );
     });
 
     it("keeps the resource_type column unchanged", () => {
       expect(statements.createTable).toContain(
-        "[resource_type] NVARCHAR(64) NOT NULL",
+        "resource_type VARCHAR2(64) NOT NULL",
       );
     });
 
-    it("brackets the schema and table identifiers", () => {
-      expect(statements.createTable).toContain("[dbo].[fhir_resources]");
+    it("leaves the table unqualified when no schema is given", () => {
+      expect(statements.createTable).toContain("CREATE TABLE fhir_resources");
+      expect(statements.createTable).not.toContain(".");
     });
 
     it("builds the resource_type index", () => {
       expect(statements.createIndex).toContain(
-        "[IX_fhir_resources_resource_type]",
+        "ix_fhir_resources_resource_type",
       );
       expect(statements.createIndex).toContain(
-        "[dbo].[fhir_resources] ([resource_type])",
+        "ON fhir_resources (resource_type)",
       );
     });
   });
 
-  describe("native JSON json column", () => {
+  describe("native JSON json column (21c+)", () => {
     const statements = buildCreateTableStatements(
-      "dbo",
+      undefined,
       "fhir_resources",
       "JSON",
     );
 
-    it("types the json column as JSON NOT NULL", () => {
-      expect(statements.createTable).toContain("[json] JSON NOT NULL");
+    it("types the json column as native JSON NOT NULL", () => {
+      expect(statements.createTable).toContain("json          JSON NOT NULL");
     });
 
-    it("does not emit NVARCHAR(MAX) for the json column", () => {
-      expect(statements.createTable).not.toContain("[json] NVARCHAR(MAX)");
+    it("does not emit a BLOB or check constraint for the json column", () => {
+      expect(statements.createTable).not.toContain("BLOB");
+      expect(statements.createTable).not.toContain("CHECK");
     });
 
     it("keeps the resource_type column unchanged", () => {
       expect(statements.createTable).toContain(
-        "[resource_type] NVARCHAR(64) NOT NULL",
+        "resource_type VARCHAR2(64) NOT NULL",
       );
     });
 
     it("leaves the index statement identical to the default", () => {
       const defaultStatements = buildCreateTableStatements(
-        "dbo",
+        undefined,
         "fhir_resources",
-        "NVARCHAR(MAX)",
+        "BLOB",
       );
       expect(statements.createIndex).toBe(defaultStatements.createIndex);
     });
   });
 
-  describe("identifier bracketing", () => {
-    it("brackets custom schema and table names", () => {
+  describe("schema qualification", () => {
+    it("qualifies the table with the schema when given", () => {
       const statements = buildCreateTableStatements(
-        "analytics",
+        "fhir",
         "resources",
         "JSON",
       );
-      expect(statements.createTable).toContain("[analytics].[resources]");
-      expect(statements.createIndex).toContain("[IX_resources_resource_type]");
-      expect(statements.createIndex).toContain(
-        "[analytics].[resources] ([resource_type])",
-      );
+      expect(statements.createTable).toContain("CREATE TABLE fhir.resources");
+      expect(statements.createIndex).toContain("ix_resources_resource_type");
+      expect(statements.createIndex).toContain("ON fhir.resources (resource_type)");
     });
   });
 });
 
 describe("resolveColumnJsonDataType", () => {
-  it("resolves nvarchar with MAX length to NVARCHAR(MAX)", () => {
-    // NVARCHAR(MAX) appears in INFORMATION_SCHEMA as data_type 'nvarchar' with a
-    // character_maximum_length of -1.
-    expect(resolveColumnJsonDataType("nvarchar", -1)).toBe("NVARCHAR(MAX)");
+  it("resolves a BLOB column to the BLOB storage type", () => {
+    // The IS JSON check constraint is not visible in ALL_TAB_COLUMNS; the
+    // column data type alone identifies the BLOB variant.
+    expect(resolveColumnJsonDataType("BLOB", 0)).toBe("BLOB");
   });
 
-  it("resolves json to JSON", () => {
-    // The native type appears as data_type 'json' with a null maximum length.
-    expect(resolveColumnJsonDataType("json", null)).toBe("JSON");
+  it("resolves the native JSON type to JSON", () => {
+    expect(resolveColumnJsonDataType("JSON", 0)).toBe("JSON");
   });
 
   it("is case-insensitive on the data type name", () => {
-    expect(resolveColumnJsonDataType("JSON", null)).toBe("JSON");
-    expect(resolveColumnJsonDataType("NVARCHAR", -1)).toBe("NVARCHAR(MAX)");
+    expect(resolveColumnJsonDataType("blob", 0)).toBe("BLOB");
+    expect(resolveColumnJsonDataType("json", 0)).toBe("JSON");
   });
 
   it("tolerates surrounding whitespace on the data type name", () => {
-    expect(resolveColumnJsonDataType("  json  ", null)).toBe("JSON");
-    expect(resolveColumnJsonDataType(" nvarchar ", -1)).toBe("NVARCHAR(MAX)");
+    expect(resolveColumnJsonDataType("  BLOB  ", 0)).toBe("BLOB");
+    expect(resolveColumnJsonDataType(" JSON ", 0)).toBe("JSON");
   });
 
-  // An existing column that is neither native JSON nor NVARCHAR(MAX) cannot
-  // faithfully hold a serialised FHIR resource. Such a column must be rejected
-  // at the boundary, naming the offending type, rather than silently coerced to
-  // NVARCHAR(MAX) - coercion would let the loader write into it and lose data
-  // through truncation or, under non-Unicode VARCHAR, character corruption
-  // (Constitution Principle IV).
+  // An existing column that is neither the BLOB variant nor the native JSON
+  // type cannot faithfully hold a serialised FHIR resource. Such a column must
+  // be rejected at the boundary, naming the offending type, rather than
+  // silently coerced - coercion would let the loader write into a column that
+  // cannot hold the data (data-model.md lifecycle table).
   describe("rejects column types that cannot hold a FHIR resource", () => {
-    it("throws for a bounded nvarchar, naming the offending type", () => {
-      expect(() => resolveColumnJsonDataType("nvarchar", 64)).toThrow(
-        /NVARCHAR\(64\)/,
-      );
+    it("throws for CLOB, naming the offending type", () => {
+      expect(() => resolveColumnJsonDataType("CLOB", 0)).toThrow(/CLOB/);
     });
 
-    it("throws for varchar, naming the offending type", () => {
-      expect(() => resolveColumnJsonDataType("varchar", 100)).toThrow(
-        /VARCHAR\(100\)/,
+    it("throws for a bounded VARCHAR2, naming the offending type", () => {
+      expect(() => resolveColumnJsonDataType("VARCHAR2", 255)).toThrow(
+        /VARCHAR2\(255\)/,
       );
     });
-
-    it("throws for a max-length varchar, which is still not Unicode-safe", () => {
-      // VARCHAR(MAX) reports a length of -1 but is non-Unicode, so it can
-      // silently corrupt multi-byte characters and must still be rejected.
-      expect(() => resolveColumnJsonDataType("varchar", -1)).toThrow(
-        /VARCHAR\(MAX\)/,
-      );
-    });
-
-    it("throws for text, naming the offending type", () => {
-      expect(() => resolveColumnJsonDataType("text", 2147483647)).toThrow(
-        /TEXT/,
-      );
+    it("throws for NCLOB, naming the offending type", () => {
+      expect(() => resolveColumnJsonDataType("NCLOB", 0)).toThrow(/NCLOB/);
     });
 
     it("names both acceptable types in the error message", () => {
       let message = "";
       try {
-        resolveColumnJsonDataType("varchar", 100);
+        resolveColumnJsonDataType("CLOB", 0);
       } catch (error) {
         message = (error as Error).message;
       }
-      expect(message).toContain("NVARCHAR(MAX)");
+      expect(message).toContain("BLOB");
       expect(message).toContain("JSON");
     });
   });
@@ -172,37 +178,53 @@ describe("resolveColumnJsonDataType", () => {
 describe("buildJsonTypeMismatchWarning", () => {
   it("returns null when the existing and requested types are equal", () => {
     expect(
-      buildJsonTypeMismatchWarning(
-        "dbo",
-        "t",
-        "NVARCHAR(MAX)",
-        "NVARCHAR(MAX)",
-      ),
+      buildJsonTypeMismatchWarning(undefined, "t", "BLOB", "BLOB"),
     ).toBeNull();
-    expect(buildJsonTypeMismatchWarning("dbo", "t", "JSON", "JSON")).toBeNull();
+    expect(buildJsonTypeMismatchWarning("fhir", "t", "JSON", "JSON")).toBeNull();
   });
 
   it("returns a warning naming both types and the table when they differ", () => {
     const warning = buildJsonTypeMismatchWarning(
-      "dbo",
+      undefined,
       "fhir_resources",
-      "NVARCHAR(MAX)",
+      "BLOB",
       "JSON",
     );
     expect(warning).not.toBeNull();
-    expect(warning).toContain("NVARCHAR(MAX)");
+    expect(warning).toContain("BLOB");
     expect(warning).toContain("JSON");
     expect(warning).toContain("fhir_resources");
   });
 
   it("names both the existing and the requested type in either direction", () => {
-    const warning = buildJsonTypeMismatchWarning(
-      "dbo",
-      "t",
-      "JSON",
-      "NVARCHAR(MAX)",
-    );
+    const warning = buildJsonTypeMismatchWarning("fhir", "t", "JSON", "BLOB");
     expect(warning).toMatch(/JSON/);
-    expect(warning).toMatch(/NVARCHAR\(MAX\)/);
+    expect(warning).toMatch(/BLOB/);
+  });
+});
+
+describe("assertNativeJsonSupported", () => {
+  it("accepts a 21c server version", () => {
+    expect(() => assertNativeJsonSupported(2100000000)).not.toThrow();
+  });
+
+  it("accepts a 23ai server version", () => {
+    expect(() => assertNativeJsonSupported(2300000000)).not.toThrow();
+  });
+
+  it("fails fast on 19c, naming the required version and the server version", () => {
+    let message = "";
+    try {
+      assertNativeJsonSupported(1930000000);
+    } catch (error) {
+      message = (error as Error).message;
+    }
+    expect(message).toContain("21c");
+    expect(message).toContain("19");
+  });
+
+  it("fails fast on any pre-21c version", () => {
+    expect(() => assertNativeJsonSupported(1800000000)).toThrow(/21c/);
+    expect(() => assertNativeJsonSupported(1202000000)).toThrow(/21c/);
   });
 });
