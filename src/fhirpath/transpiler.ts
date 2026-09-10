@@ -116,10 +116,7 @@ export class Transpiler {
    * @param storage - The targeted JSON storage type.
    * @returns The Oracle-shaped SQL fragment.
    */
-  static applyOracleJsonSyntax(
-    expr: string,
-    storage: "BLOB" | "JSON",
-  ): string {
+  static applyOracleJsonSyntax(expr: string, storage: "BLOB" | "JSON"): string {
     const formatSuffix = storage === "BLOB" ? " FORMAT JSON" : "";
     const decorated = expr.replaceAll(
       /JSON_VALUE\(([^(),]+),\s*'([^']+)'\)/g,

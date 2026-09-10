@@ -102,8 +102,7 @@ describe("tree walker Oracle emission", () => {
           column: [
             {
               name: "race_code",
-              path:
-                "extension('http://hl7.org/fhir/us/core/StructureDefinition/us-core-race').extension('ombCategory').value.ofType(Coding).code.first()",
+              path: "extension('https://hl7.org/fhir/us/core/StructureDefinition/us-core-race').extension('ombCategory').value.ofType(Coding).code.first()",
               type: "code",
             },
           ],
@@ -132,7 +131,7 @@ describe("tree walker Oracle emission", () => {
         },
       ],
     });
-    expect(sql).toContain("COALESCE(forEach_0.idx - 1, 0) AS \"i\"");
+    expect(sql).toContain('COALESCE(forEach_0.idx - 1, 0) AS "i"');
   });
 
   it("resolves %rowIndex at the resource root to 0", () => {
@@ -141,7 +140,7 @@ describe("tree walker Oracle emission", () => {
       status: "active",
       select: [{ column: [{ name: "i", path: "%rowIndex", type: "integer" }] }],
     });
-    expect(sql).toContain("0 AS \"i\"");
+    expect(sql).toContain('0 AS "i"');
   });
 
   it("composes unionAll as top-level UNION ALL branches", () => {
@@ -174,10 +173,10 @@ describe("tree walker Oracle emission", () => {
   });
 
   it("emits nested select columns in the enclosing APPLY scope", () => {
-  // Alias naming follows the sibling tests' `forEach_N` convention; an earlier
-  // draft of this test pinned a path-derived alias (`contact_0`), which no
-  // deterministic rule could reconcile with the forEach_N pins above.
-  // Aliases are internal; the contract under test is the column scope.
+    // Alias naming follows the sibling tests' `forEach_N` convention; an earlier
+    // draft of this test pinned a path-derived alias (`contact_0`), which no
+    // deterministic rule could reconcile with the forEach_N pins above.
+    // Aliases are internal; the contract under test is the column scope.
     const sql = transpile({
       resource: "Patient",
       status: "active",

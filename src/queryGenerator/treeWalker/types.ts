@@ -11,12 +11,7 @@ import type { TranspilerContext } from "../../fhirpath/transpiler.js";
 export const SQL_INT = "NUMBER(19)";
 
 export type NodeKind =
-  | "ColumnsOnly"
-  | "Group"
-  | "ForEach"
-  | "ForEachOrNull"
-  | "Repeat"
-  | "UnionAll";
+  "ColumnsOnly" | "Group" | "ForEach" | "ForEachOrNull" | "Repeat" | "UnionAll";
 
 export interface PartitionKey {
   /** Logical name, e.g. "id", "fe_0_key", "repeat_2_path". */

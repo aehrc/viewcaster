@@ -123,9 +123,7 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
 
   const union = unionFragments[0];
   const rowCtes = rowFragments.flatMap((f) => f.ctes);
-  const rowFromExtensions = rowFragments
-    .map((f) => f.fromExtensions)
-    .join("");
+  const rowFromExtensions = rowFragments.map((f) => f.fromExtensions).join("");
   const rowColumns = rowFragments.flatMap((f) => f.columns);
 
   return {

@@ -167,7 +167,9 @@ async function executeViewDefinition(
     resourceJsonDataType: storage,
   });
   const result = sqlOnFhir.transpile(viewDef, testId);
-  const queryResult = await connection.execute<Record<string, unknown>>(result.sql);
+  const queryResult = await connection.execute<Record<string, unknown>>(
+    result.sql,
+  );
   const columns = (queryResult.metaData ?? []).map((m) => m.name);
   return {
     results: parseJsonStringsInResults(
@@ -187,20 +189,17 @@ function extractBooleanColumns(viewDefinition: ViewDefinition): Set<string> {
 
   function extractFromSelect(selectDef: Record<string, unknown>): void {
     const column = selectDef.column as
-      | Array<Record<string, unknown>>
-      | undefined;
+      Array<Record<string, unknown>> | undefined;
     if (column) {
       for (const col of column) {
         if (col.type === "boolean") booleanColumns.add(col.name as string);
       }
     }
     const select = selectDef.select as
-      | Array<Record<string, unknown>>
-      | undefined;
+      Array<Record<string, unknown>> | undefined;
     if (select) for (const nested of select) extractFromSelect(nested);
     const unionAll = selectDef.unionAll as
-      | Array<Record<string, unknown>>
-      | undefined;
+      Array<Record<string, unknown>> | undefined;
     if (unionAll) for (const branch of unionAll) extractFromSelect(branch);
   }
 
@@ -262,9 +261,11 @@ function deepEqual(a: unknown, b: unknown): boolean {
   if (a === b) return true;
   if (bothNullOrUndefined(a, b)) return true;
   if (eitherNullOrUndefined(a, b)) return false;
-  if (isNumeric(a) && isNumeric(b)) return Math.abs(Number(a) - Number(b)) < 1e-10;
+  if (isNumeric(a) && isNumeric(b))
+    return Math.abs(Number(a) - Number(b)) < 1e-10;
   if (typeof a !== typeof b) return handleBooleanNumberConversion(a, b);
-  if (typeof a === "object" && typeof b === "object") return compareObjects(a, b);
+  if (typeof a === "object" && typeof b === "object")
+    return compareObjects(a, b);
   return false;
 }
 
@@ -326,9 +327,7 @@ function handleBooleanNumberConversion(a: unknown, b: unknown): boolean {
 function compareObjects(a: unknown, b: unknown): boolean {
   if (Array.isArray(a) !== Array.isArray(b)) return false;
   if (Array.isArray(a) && Array.isArray(b)) {
-    return (
-      a.length === b.length && a.every((val, i) => deepEqual(val, b[i]))
-    );
+    return a.length === b.length && a.every((val, i) => deepEqual(val, b[i]));
   }
   const objA = a as Record<string, unknown>;
   const objB = b as Record<string, unknown>;
@@ -435,6 +434,7 @@ describe.skipIf(!hasOracleEnvironment())(
 
       describe(suite.title ?? fileName, () => {
         afterAll(async () => {
+          await Promise.resolve();
           if (typeof globalThis !== "undefined") {
             globalThis.testResults = globalThis.testResults ?? {};
             globalThis.testResults[fileName] = { tests: suiteResults };
@@ -453,10 +453,7 @@ describe.skipIf(!hasOracleEnvironment())(
               insertedIds = await insertSuiteResources(suite.resources, testId);
               if (testCase.expectError) {
                 try {
-                  await executeViewDefinition(
-                    testCase.view,
-                    testId,
-                  );
+                  await executeViewDefinition(testCase.view, testId);
                   entry.result = {
                     passed: false,
                     error: "Expected an error but the test passed",
@@ -468,13 +465,10 @@ describe.skipIf(!hasOracleEnvironment())(
                 }
                 return;
               }
-              const result = await executeViewDefinition(
-                testCase.view,
-                testId,
-              );
+              const result = await executeViewDefinition(testCase.view, testId);
               const passed = compareResults(
                 result.results,
-                (testCase.expect ?? []),
+                testCase.expect ?? [],
                 testCase.expectColumns,
                 result.columns,
               );

@@ -73,7 +73,9 @@ describe("discoverFiles", () => {
       "CoverageEligibilityRequest.ndjson": "{}\n",
     });
     const { files } = discoverFiles(options);
-    const types = files.map((file) => file.resourceType).sort((a, b) => a.localeCompare(b)) // eslint-disable-line unicorn/no-array-sort -- lib lacks ES2023 toSorted;
+    const types = files
+      .map((file) => file.resourceType)
+      .sort((a, b) => a.localeCompare(b));
     expect(types).toEqual([
       "CoverageEligibilityRequest",
       "Observation",
@@ -95,7 +97,7 @@ describe("discoverFiles", () => {
     expect(files.map((file) => file.resourceType)).toEqual(["Patient"]);
     const skippedNames = skipped
       .map((entry) => entry.file)
-      .sort((a, b) => (a < b ? -1 : (a > b ? 1 : 0)));
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     expect(skippedNames).toEqual([
       "Patient.ndjson.bak",
       "README.md",
@@ -149,19 +151,22 @@ describe("parseFilename", () => {
   });
 
   it("accepts digits and mixed case after the leading capital", () => {
-    expect(parseFilename("MedicationRequest1.ndjson", "{ResourceType}.ndjson"))
-      .toEqual({ resourceType: "MedicationRequest1" });
+    expect(
+      parseFilename("MedicationRequest1.ndjson", "{ResourceType}.ndjson"),
+    ).toEqual({ resourceType: "MedicationRequest1" });
   });
 
   it("rejects filenames that do not match the pattern", () => {
-    expect(parseFilename("patient.ndjson", "{ResourceType}.ndjson"))
-      .toBeUndefined();
-    expect(parseFilename("Patient.txt", "{ResourceType}.ndjson"))
-      .toBeUndefined();
-    expect(parseFilename("Patient.ndjson.extra", "{ResourceType}.ndjson"))
-      .toBeUndefined();
-    expect(parseFilename(".ndjson", "{ResourceType}.ndjson"))
-      .toBeUndefined();
+    expect(
+      parseFilename("patient.ndjson", "{ResourceType}.ndjson"),
+    ).toBeUndefined();
+    expect(
+      parseFilename("Patient.txt", "{ResourceType}.ndjson"),
+    ).toBeUndefined();
+    expect(
+      parseFilename("Patient.ndjson.extra", "{ResourceType}.ndjson"),
+    ).toBeUndefined();
+    expect(parseFilename(".ndjson", "{ResourceType}.ndjson")).toBeUndefined();
   });
 
   it("rejects an empty resource type", () => {

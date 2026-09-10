@@ -32,6 +32,7 @@
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
+import { hasOracleEnvironment } from "./testDatabase.js";
 import {
   createLoaderIntegrationHarness,
   SAMPLE_PATIENTS,
@@ -39,10 +40,18 @@ import {
 
 const harness = createLoaderIntegrationHarness();
 
+const oracleAvailable = (() => {
+  try {
+    return hasOracleEnvironment();
+  } catch {
+    return false;
+  }
+})();
+
 beforeAll(() => harness.connect());
 afterAll(() => harness.cleanup());
 
-describe("loadNdjsonFiles json column type (US2)", () => {
+describe.skipIf(!oracleAvailable)("loadNdjsonFiles json column type (US2)", () => {
   it("creates a BLOB IS JSON column and loads every row when the type is omitted", async () => {
     // The default path must work on every supported version (FR-011).
     const tableName = harness.makeTableName();
@@ -135,7 +144,9 @@ describe("loadNdjsonFiles json column type (US2)", () => {
   });
 });
 
-describe("loadNdjsonFiles existing json column lifecycle (data-model.md)", () => {
+describe.skipIf(!oracleAvailable)(
+  "loadNdjsonFiles existing json column lifecycle (data-model.md)",
+  () => {
   it("warns on the other supported storage type and loads into the table unchanged", async () => {
     // First load creates the table as the default BLOB.
     const tableName = harness.makeTableName();

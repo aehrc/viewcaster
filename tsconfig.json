@@ -22,7 +22,7 @@
   "include": ["src/**/*", "test/**/*", "vitest.config.ts"],
   "exclude": [
     "node_modules",
-    "dist",
+    "dist"
     // Old mssql-era test modules not yet ported; re-included by Phase 3/5.
   ]
 }

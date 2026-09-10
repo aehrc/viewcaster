@@ -71,7 +71,10 @@ describe("Oracle column emission", () => {
   });
 
   it("quotes output aliases", () => {
-    const { sql } = transpileColumn({ name: "family_name", path: "name.family" });
+    const { sql } = transpileColumn({
+      name: "family_name",
+      path: "name.family",
+    });
     expect(sql).toContain(`AS "family_name"`);
     expect(sql).not.toContain("AS [family_name]");
   });

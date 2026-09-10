@@ -475,7 +475,7 @@ export class FHIRPathToOracleVisitor
    */
   visitStringLiteral(ctx: StringLiteralContext): string {
     // Remove surrounding quotes and escape internal quotes
-    const value = ctx.text.slice(1, -1).replaceAll('\'', "''");
+    const value = ctx.text.slice(1, -1).replaceAll("'", "''");
     return `'${value}'`;
   }
 
@@ -1580,7 +1580,7 @@ export class FHIRPathToOracleVisitor
 
   private formatConstantValue(value: string | number | boolean | null): string {
     if (typeof value === "string") {
-      return `'${value.replaceAll('\'', "''")}'`;
+      return `'${value.replaceAll("'", "''")}'`;
     } else if (typeof value === "number") {
       return value.toString();
     } else if (typeof value === "boolean") {
@@ -1589,7 +1589,7 @@ export class FHIRPathToOracleVisitor
     } else if (value === null || value === undefined) {
       return "NULL";
     } else {
-      return `'${JSON.stringify(value).replaceAll('\'', "''")}'`;
+      return `'${JSON.stringify(value).replaceAll("'", "''")}'`;
     }
   }
 

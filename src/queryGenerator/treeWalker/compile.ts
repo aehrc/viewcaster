@@ -6,7 +6,10 @@
  * @author John Grimes
  */
 
-import { Transpiler, type TranspilerContext } from "../../fhirpath/transpiler.js";
+import {
+  Transpiler,
+  type TranspilerContext,
+} from "../../fhirpath/transpiler.js";
 import { ColumnExpressionGenerator } from "../ColumnExpressionGenerator.js";
 import { PathParser } from "../PathParser.js";
 import { WhereClauseBuilder } from "../WhereClauseBuilder.js";

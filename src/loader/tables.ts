@@ -112,7 +112,10 @@ export function buildCreateTableStatements(
  * @param charLength - The ALL_TAB_COLUMNS CHAR_LENGTH, when non-zero.
  * @returns A readable type such as `VARCHAR2(255)`, `CLOB` or `JSON`.
  */
-function formatColumnType(dataType: string, charLength?: number | null): string {
+function formatColumnType(
+  dataType: string,
+  charLength?: number | null,
+): string {
   const baseType = dataType.trim().toUpperCase();
   if (!charLength) {
     return baseType;
@@ -241,7 +244,7 @@ export async function tableExists(
          WHERE table_name = :tableName`,
         [tableName.toUpperCase()],
       );
-      const row = result.rows?.[0] as { N: number } | undefined; // eslint-disable-line @typescript-eslint/naming-convention
+      const row = result.rows?.[0] as { N: number } | undefined;
       return (row?.N ?? 0) > 0;
     }
     const result = await connection.execute(
@@ -250,7 +253,7 @@ export async function tableExists(
        WHERE owner = :owner AND table_name = :tableName`,
       [schemaName.toUpperCase(), tableName.toUpperCase()],
     );
-    const row = result.rows?.[0] as { N: number } | undefined; // eslint-disable-line @typescript-eslint/naming-convention
+    const row = result.rows?.[0] as { N: number } | undefined;
     return (row?.N ?? 0) > 0;
   } finally {
     await connection.close();
@@ -288,9 +291,7 @@ export async function getExistingJsonColumnType(
              AND column_name = 'JSON'`,
         ));
     const row = result.rows?.[0] as
-      // eslint-disable-next-line @typescript-eslint/naming-convention -- ALL_TAB_COLUMNS columns are upper case.
-      | { DATA_TYPE: string; CHAR_LENGTH: number }
-      | undefined;
+      { DATA_TYPE: string; CHAR_LENGTH: number } | undefined;
     if (!row) {
       return null;
     }

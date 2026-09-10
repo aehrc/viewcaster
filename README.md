@@ -17,7 +17,7 @@ Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
   `getResourceKey()`, `getReferenceKey([Type])`, and `%rowIndex`
 - **Oracle JSON optimisation** - generates queries over `JSON_VALUE`,
   `JSON_QUERY`, `JSON_TABLE` and `JSON_EXISTS`, with `CROSS APPLY`/`OUTER
-  APPLY` for array unrolling
+APPLY` for array unrolling
 - **Two JSON storage types** - a `BLOB CHECK (json IS JSON)` column (default,
   19c+) and the native `JSON` type (21c+ opt-in)
 - **Type casting** - automatic Oracle type mapping from FHIR data types, with
@@ -76,15 +76,15 @@ JSON, not the surrogate `id` column.
 Reads a ViewDefinition (JSON) and writes one Oracle `SELECT` statement
 (suitable for `CREATE VIEW ... AS` or `INSERT INTO ... SELECT`).
 
-| Option | Default | Description |
-|---|---|---|
-| `-i, --input <file>` | stdin | ViewDefinition JSON file. |
-| `-o, --output <file>` | stdout | Output SQL file. |
-| `--resource-json-data-type <type>` | `BLOB` | Storage type the SQL targets: `BLOB` (19c+, emits `FORMAT JSON`) or `JSON` (21c+, native type). Case-insensitive. |
-| `--table-name <name>` | `fhir_resources` | Source table. |
-| `--schema-name <name>` | current schema | Schema qualifier. |
-| `--resource-id-column <name>` | `id` | Surrogate id column. |
-| `--resource-json-column <name>` | `json` | JSON column. |
+| Option                             | Default          | Description                                                                                                       |
+| ---------------------------------- | ---------------- | ----------------------------------------------------------------------------------------------------------------- |
+| `-i, --input <file>`               | stdin            | ViewDefinition JSON file.                                                                                         |
+| `-o, --output <file>`              | stdout           | Output SQL file.                                                                                                  |
+| `--resource-json-data-type <type>` | `BLOB`           | Storage type the SQL targets: `BLOB` (19c+, emits `FORMAT JSON`) or `JSON` (21c+, native type). Case-insensitive. |
+| `--table-name <name>`              | `fhir_resources` | Source table.                                                                                                     |
+| `--schema-name <name>`             | current schema   | Schema qualifier.                                                                                                 |
+| `--resource-id-column <name>`      | `id`             | Surrogate id column.                                                                                              |
+| `--resource-json-column <name>`    | `json`           | JSON column.                                                                                                      |
 
 Invalid ViewDefinitions exit non-zero, name the offending element on stderr,
 and write nothing.
@@ -102,7 +102,7 @@ wallets).
 
 Loading options: `--table-name` (default `fhir_resources`), `--schema-name`,
 `--resource-type <type>` (load only `{type}.ndjson`),
-`--resource-json-data-type BLOB|JSON` (`ORACLE_RESOURCE_JSON_DATA_TYPE`), 
+`--resource-json-data-type BLOB|JSON` (`ORACLE_RESOURCE_JSON_DATA_TYPE`),
 `--truncate`, `--no-create-table`, `--batch-size <n>` (default `1000`),
 `--parallel <n>` (default `4`), `--dry-run`, `--continue-on-error`,
 `--verbose` / `--progress` / `--quiet`.
@@ -120,8 +120,8 @@ const result = new SqlOnFhir({ resourceJsonDataType: "BLOB" }).transpile({
   resource: "Patient",
   select: [{ column: [{ name: "id", path: "id", type: "id" }] }],
 });
-console.log(result.sql);       // single Oracle SELECT statement
-console.log(result.columns);   // [{ name, type, nullable }, ...]
+console.log(result.sql); // single Oracle SELECT statement
+console.log(result.columns); // [{ name, type, nullable }, ...]
 
 // Load.
 await loadNdjsonFiles({
@@ -141,21 +141,21 @@ arbitrary-precision decimals, Unicode) that native Oracle types would coerce.
 Use `oracle/type` or `ansi/type` column tags for explicit control; precedence
 is `oracle/type` > `ansi/type` > the defaults below.
 
-| FHIR type | Oracle type |
-|---|---|
-| `id` | `VARCHAR2(64)` |
-| `boolean` | `NUMBER(1)` (1/0/NULL via `CASE`) |
-| `integer`, `positiveInt`, `unsignedInt` | `NUMBER(10)` |
-| `integer64` | `NUMBER(19)` |
-| `decimal` | `VARCHAR2(4000)` (preserves precision and trailing zeros) |
-| `date` | `VARCHAR2(10)` |
-| `dateTime` | `VARCHAR2(50)` |
-| `instant` | `VARCHAR2(50)` |
-| `time` | `VARCHAR2(20)` |
-| `string`, `markdown`, `code`, `uri`, `url`, `canonical` | `VARCHAR2(4000)` |
-| `uuid` | `VARCHAR2(100)` |
-| `oid` | `VARCHAR2(255)` |
-| `base64Binary` | `VARCHAR2(4000)` (base64 text) |
+| FHIR type                                               | Oracle type                                               |
+| ------------------------------------------------------- | --------------------------------------------------------- |
+| `id`                                                    | `VARCHAR2(64)`                                            |
+| `boolean`                                               | `NUMBER(1)` (1/0/NULL via `CASE`)                         |
+| `integer`, `positiveInt`, `unsignedInt`                 | `NUMBER(10)`                                              |
+| `integer64`                                             | `NUMBER(19)`                                              |
+| `decimal`                                               | `VARCHAR2(4000)` (preserves precision and trailing zeros) |
+| `date`                                                  | `VARCHAR2(10)`                                            |
+| `dateTime`                                              | `VARCHAR2(50)`                                            |
+| `instant`                                               | `VARCHAR2(50)`                                            |
+| `time`                                                  | `VARCHAR2(20)`                                            |
+| `string`, `markdown`, `code`, `uri`, `url`, `canonical` | `VARCHAR2(4000)`                                          |
+| `uuid`                                                  | `VARCHAR2(100)`                                           |
+| `oid`                                                   | `VARCHAR2(255)`                                           |
+| `base64Binary`                                          | `VARCHAR2(4000)` (base64 text)                            |
 
 Type tags are FHIR column tags:
 
@@ -206,7 +206,7 @@ names (case included) are preserved.
   older database fails fast, naming the required version.
 - **4,000-byte scalar limit (19c).** On the default storage mode, individual
   scalar values extracted by a view are limited to 4,000 bytes (`JSON_VALUE
-  RETURNING VARCHAR2(4000)`); resources themselves are unlimited.
+RETURNING VARCHAR2(4000)`); resources themselves are unlimited.
 - **Decimal lexical forms.** Oracle normalises JSON numbers on extraction
   (lexical `1.0` returns as `1`); the default `VARCHAR2` decimal mapping
   therefore returns the normalised form on versions whose extraction cannot

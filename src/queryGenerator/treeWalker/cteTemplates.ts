@@ -101,9 +101,7 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
     storage,
   } = args;
   const spine = args.spine;
-  const scopeAliases = spine
-    ? [spine.baseAlias, ...spine.traceAliases]
-    : null;
+  const scopeAliases = spine ? [spine.baseAlias, ...spine.traceAliases] : null;
   const keyLines = partitionKeys.map((k) => {
     if (scopeAliases === null || spine === undefined) {
       return `${k.sqlExpr} AS ${k.name}`;
@@ -136,9 +134,7 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
 function buildRecursiveMember(args: BuildRepeatCteArgs): string {
   const { cteAlias, partitionKeys, storage, paths } = args;
   const head = qualifiedKeyCols("cte", partitionKeys);
-  const carried = (args.carried ?? [])
-    .map((c) => `cte.${c.name}`)
-    .join(", ");
+  const carried = (args.carried ?? []).map((c) => `cte.${c.name}`).join(", ");
   const carriedPart = carried ? `,\n    ${carried}` : "";
   const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
   const chains = paths

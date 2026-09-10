@@ -189,7 +189,6 @@ function buildForEachApply(
     pathParser.parseArrayIndexing(pathWithoutWhere);
   const arrayPaths = pathParser.detectArrayFlatteningPaths(forEachPath);
 
-
   if (arrayPaths.length > 1) {
     return buildNestedApply(
       arrayPaths,
@@ -250,9 +249,9 @@ function buildSimpleApply(
   const fmt = formatJsonSuffix(storage);
   const indexedPath = useFirst
     ? `${path}[0]`
-    : (arrayIndex === null
+    : arrayIndex === null
       ? path
-      : `${path}[${arrayIndex}]`);
+      : `${path}[${arrayIndex}]`;
 
   const jsonTable = isJsonTableColumn(source)
     ? `JSON_TABLE(JSON_QUERY(${source}${fmt}, '$.${indexedPath}' RETURNING CLOB), '$[*]' COLUMNS (${columns}))`
@@ -320,7 +319,6 @@ function buildNestedApply(
   void whereCondition;
   return clauses;
 }
-
 
 /**
  * Checks whether a JSON source expression is a column produced by a JSON_TABLE

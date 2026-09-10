@@ -142,7 +142,11 @@ export function walkRepeat(
   const inner = walk(innerNode, innerCtx);
 
   if (inner.kind === "union" && inner.branches !== undefined) {
-    return mergeRepeatUnion({ ...inner, branches: inner.branches }, cte, innerCtx);
+    return mergeRepeatUnion(
+      { ...inner, branches: inner.branches },
+      cte,
+      innerCtx,
+    );
   }
 
   // When the inner sub-tree anchored its own spine CTE on this repeat's CTE,
@@ -229,9 +233,7 @@ function mergeRepeatUnion(
         sqlExpr: `CASE dup.b ${whens} ELSE NULL END`,
       };
     });
-    const branchCtes = uniqueByAlias(
-      branches.flatMap((b) => b.ctes),
-    );
+    const branchCtes = uniqueByAlias(branches.flatMap((b) => b.ctes));
     return {
       kind: "rows",
       ctes: [cte, ...branchCtes],
@@ -340,7 +342,10 @@ function buildRepeatInnerCtx(
   const spine: SpineContext = {
     baseAlias: cteAlias,
     carried: [
-      ...(carried ?? []).map((c) => ({ ...c, sqlExpr: `${cteAlias}.${c.name}` })),
+      ...(carried ?? []).map((c) => ({
+        ...c,
+        sqlExpr: `${cteAlias}.${c.name}`,
+      })),
       ...ownCarried,
     ],
     trace: [],
@@ -376,32 +381,43 @@ function buildRebaseInfo(ctx: Context, cteAlias: string): RebaseInfo {
     // The original defining-scope expression (e.g. "r.id", "forEach_1.idx")
     // and the base CTE-qualified form (e.g. "repeat_0.id") both occur in
     // sibling SQL; the spine CTE projects every key under its name.
-    replacements.push({ from: k.sqlExpr, to: `${cteAlias}.${k.name}` }, {
-      from: `${base}.${k.name}`,
-      to: `${cteAlias}.${k.name}`,
-    });
+    replacements.push(
+      { from: k.sqlExpr, to: `${cteAlias}.${k.name}` },
+      {
+        from: `${base}.${k.name}`,
+        to: `${cteAlias}.${k.name}`,
+      },
+    );
   }
-  replacements.push({
-    from: `${base}.elem_path`,
-    to: `${cteAlias}.${base}_path`,
-  }, {
-    from: `${base}.elem_order`,
-    to: `${cteAlias}.${base}_elem_order`,
-  }, {
-    from: `${base}.item_json`,
-    to: `${cteAlias}.${base}_item_json`,
-  }, {
-    from: `${base}.item_scalar`,
-    to: `${cteAlias}.${base}_item_scalar`,
-  });
+  replacements.push(
+    {
+      from: `${base}.elem_path`,
+      to: `${cteAlias}.${base}_path`,
+    },
+    {
+      from: `${base}.elem_order`,
+      to: `${cteAlias}.${base}_elem_order`,
+    },
+    {
+      from: `${base}.item_json`,
+      to: `${cteAlias}.${base}_item_json`,
+    },
+    {
+      from: `${base}.item_scalar`,
+      to: `${cteAlias}.${base}_item_scalar`,
+    },
+  );
   for (const c of spine.carried) {
     // The original ancestor-level form (composition target: an outer spine's
     // own rebase points at this base-qualified form) and the base CTE's own
     // qualified reference both occur in sibling SQL.
-    replacements.push({ from: c.origin, to: `${cteAlias}.${c.name}` }, {
-      from: `${base}.${c.name}`,
-      to: `${cteAlias}.${c.name}`,
-    });
+    replacements.push(
+      { from: c.origin, to: `${cteAlias}.${c.name}` },
+      {
+        from: `${base}.${c.name}`,
+        to: `${cteAlias}.${c.name}`,
+      },
+    );
   }
   for (const t of spine.trace) {
     for (const col of ["idx", "value", "scalar"] as const) {

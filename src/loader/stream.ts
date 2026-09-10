@@ -41,9 +41,7 @@ import type { DiscoveredFile, FileLoadResult } from "./types.js";
  * @param jsonType - The storage type of the target column.
  * @returns The bind definition for the json column.
  */
-function jsonBindDef(
-  jsonType: ResourceJsonDataType,
-): oracledb.BindDefinition {
+function jsonBindDef(jsonType: ResourceJsonDataType): oracledb.BindDefinition {
   return {
     type: jsonType === "JSON" ? oracledb.DB_TYPE_JSON : oracledb.DB_TYPE_BLOB,
   };
@@ -156,13 +154,9 @@ async function insertOrSalvageBatch(
   let inserted = 0;
   for (const line of lines) {
     try {
-      await insertBatch(
-        connection,
-        qualifiedTable,
-        resourceType,
-        jsonType,
-        [line],
-      );
+      await insertBatch(connection, qualifiedTable, resourceType, jsonType, [
+        line,
+      ]);
       inserted++;
     } catch (lineError) {
       errors.push(
@@ -214,9 +208,7 @@ export async function loadFile(
   const errors: string[] = [];
   let batch: string[] = [];
   let failed = false;
-  const qualifiedTable = schemaName
-    ? `${schemaName}.${tableName}`
-    : tableName;
+  const qualifiedTable = schemaName ? `${schemaName}.${tableName}` : tableName;
 
   const connection = await pool.getConnection();
   try {

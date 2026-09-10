@@ -235,18 +235,56 @@ const FHIR_R4_RESOURCE_TYPES = new Set([
   "VisionPrescription",
 ]);
 
-
 /**
  * Oracle reserved words that cannot be used as unquoted identifiers. This is a
  * subset of commonly used reserved words.
  */
 const ORACLE_RESERVED_WORDS = new Set([
-  "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "DROP", "CREATE",
-  "ALTER", "TABLE", "INDEX", "VIEW", "PROCEDURE", "FUNCTION", "TRIGGER",
-  "DATABASE", "SCHEMA", "USER", "ROLE", "GRANT", "REVOKE", "JOIN", "UNION",
-  "ORDER", "GROUP", "HAVING", "AS", "ON", "IN", "EXISTS", "BETWEEN", "LIKE",
-  "AND", "OR", "NOT", "NULL", "IS", "LEVEL", "SIZE", "TYPE", "RESOURCE",
-  "CHECK", "UNIQUE", "WITH", "VALUES",
+  "SELECT",
+  "FROM",
+  "WHERE",
+  "INSERT",
+  "UPDATE",
+  "DELETE",
+  "DROP",
+  "CREATE",
+  "ALTER",
+  "TABLE",
+  "INDEX",
+  "VIEW",
+  "PROCEDURE",
+  "FUNCTION",
+  "TRIGGER",
+  "DATABASE",
+  "SCHEMA",
+  "USER",
+  "ROLE",
+  "GRANT",
+  "REVOKE",
+  "JOIN",
+  "UNION",
+  "ORDER",
+  "GROUP",
+  "HAVING",
+  "AS",
+  "ON",
+  "IN",
+  "EXISTS",
+  "BETWEEN",
+  "LIKE",
+  "AND",
+  "OR",
+  "NOT",
+  "NULL",
+  "IS",
+  "LEVEL",
+  "SIZE",
+  "TYPE",
+  "RESOURCE",
+  "CHECK",
+  "UNIQUE",
+  "WITH",
+  "VALUES",
 ]);
 
 /**
@@ -314,12 +352,37 @@ export function validateResourceType(resourceType: string): void {
  * Valid Oracle base type names.
  */
 const VALID_ORACLE_TYPES = new Set([
-  "NUMBER", "INTEGER", "INT", "SMALLINT", "FLOAT", "BINARY_FLOAT",
-  "BINARY_DOUBLE", "DECIMAL", "NUMERIC", "REAL", "DOUBLE PRECISION",
-  "DATE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE", "TIMESTAMP WITH LOCAL TIME ZONE",
-  "INTERVAL YEAR TO MONTH", "INTERVAL DAY TO SECOND",
-  "CHAR", "NCHAR", "VARCHAR2", "NVARCHAR2", "VARCHAR", "CLOB", "NCLOB",
-  "BLOB", "BFILE", "RAW", "LONG RAW", "JSON", "BOOLEAN", "XMLTYPE",
+  "NUMBER",
+  "INTEGER",
+  "INT",
+  "SMALLINT",
+  "FLOAT",
+  "BINARY_FLOAT",
+  "BINARY_DOUBLE",
+  "DECIMAL",
+  "NUMERIC",
+  "REAL",
+  "DOUBLE PRECISION",
+  "DATE",
+  "TIMESTAMP",
+  "TIMESTAMP WITH TIME ZONE",
+  "TIMESTAMP WITH LOCAL TIME ZONE",
+  "INTERVAL YEAR TO MONTH",
+  "INTERVAL DAY TO SECOND",
+  "CHAR",
+  "NCHAR",
+  "VARCHAR2",
+  "NVARCHAR2",
+  "VARCHAR",
+  "CLOB",
+  "NCLOB",
+  "BLOB",
+  "BFILE",
+  "RAW",
+  "LONG RAW",
+  "JSON",
+  "BOOLEAN",
+  "XMLTYPE",
 ]);
 
 /**
@@ -351,7 +414,10 @@ export function validateOracleType(sqlType: string): void {
   }
 
   // Validate parameters if present: (size), (precision,scale) or (precision) ...
-  if (paramsPart && !/^\(\s*\d+(\s*(CHAR|BYTE))?\s*(\s*,\s*\d+\s*)?\)$/.test(paramsPart)) {
+  if (
+    paramsPart &&
+    !/^\(\s*\d+(\s*(CHAR|BYTE))?\s*(\s*,\s*\d+\s*)?\)$/.test(paramsPart)
+  ) {
     throw new Error(
       `Invalid Oracle type format: '${sqlType}'. Must be a valid Oracle data type such as VARCHAR2(4000), NUMBER(10), or NUMBER(38,18).`,
     );
@@ -461,7 +527,10 @@ export function validateAnsiSqlType(ansiType: string): string {
   }
 
   // Validate parameters if present: (size) or (precision,scale)
-  if (parameters && !/^\(\s*\d+(\s*(CHAR|BYTE))?\s*(\s*,\s*\d+\s*)?\)$/i.test(parameters)) {
+  if (
+    parameters &&
+    !/^\(\s*\d+(\s*(CHAR|BYTE))?\s*(\s*,\s*\d+\s*)?\)$/i.test(parameters)
+  ) {
     throw new Error(
       `Invalid ANSI SQL type format: '${ansiType}'. Must be a valid ANSI/ISO SQL type such as INTEGER, CHARACTER(50), or DECIMAL(10,2).`,
     );

@@ -35,11 +35,19 @@ import type { LoadOptions } from "./loader/types.js";
  * @param commandOptions - Command options.
  * @returns Database configuration with dummy credential values.
  */
-function getDryRunDatabaseConfig(commandOptions: Record<string, unknown>) {
+function getDryRunDatabaseConfig(commandOptions: Record<string, unknown>): {
+  host: string;
+  port: number | undefined;
+  serviceName: string;
+  user: string;
+  password: string;
+  connectString: string | undefined;
+} {
   return {
     host: (commandOptions.host as string | undefined) ?? "localhost",
     port: (commandOptions.port as number | undefined) ?? 1521,
-    serviceName: (commandOptions.serviceName as string | undefined) ?? "FREEPDB1",
+    serviceName:
+      (commandOptions.serviceName as string | undefined) ?? "FREEPDB1",
     user: (commandOptions.user as string | undefined) ?? "dry-run",
     password: (commandOptions.password as string | undefined) ?? "dry-run",
     connectString: commandOptions.connectString as string | undefined,
@@ -115,7 +123,7 @@ export function buildLoaderOptions(
  * @param directory - Directory to load from.
  * @param commandOptions - Command options.
  */
- 
+
 async function handleLoadCommand(
   directory: string,
   commandOptions: Record<string, unknown>,
@@ -130,7 +138,9 @@ async function handleLoadCommand(
       process.exit(1);
     }
   } catch (error) {
-    console.error(`Error: ${error instanceof Error ? error.message : String(error)}`);
+    console.error(
+      `Error: ${error instanceof Error ? error.message : String(error)}`,
+    );
     process.exit(1);
   }
 }
@@ -163,7 +173,12 @@ export function createLoadCommand(): Command {
     )
     .option("--no-create-table", "Do not create the table if it doesn't exist")
     .option("--truncate", "Truncate table before loading", false)
-    .option("--batch-size <size>", "Rows per executeMany batch", Number.parseInt, 1000)
+    .option(
+      "--batch-size <size>",
+      "Rows per executeMany batch",
+      Number.parseInt,
+      1000,
+    )
     .option(
       "--parallel <count>",
       "Number of files to process in parallel",

@@ -78,9 +78,7 @@ export async function createConnectionPool(
  * Close a connection pool safely.
  * @param pool - The connection pool to close.
  */
-export async function closeConnectionPool(
-  pool: oracledb.Pool,
-): Promise<void> {
+export async function closeConnectionPool(pool: oracledb.Pool): Promise<void> {
   try {
     await pool.close(0);
   } catch {
@@ -110,7 +108,11 @@ export async function testConnection(pool: oracledb.Pool): Promise<boolean> {
  * @param overrides - Optional configuration overrides.
  * @returns Database configuration.
  */
-// eslint-disable-next-line complexity -- Configuration parsing is inherently complex
+
+/**
+ *
+ * @param overrides
+ */
 export function getDatabaseConfigFromEnv(
   overrides?: Partial<DatabaseOptions>,
 ): DatabaseOptions {

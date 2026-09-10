@@ -140,7 +140,7 @@ async function countNdjsonLines(file: DiscoveredFile): Promise<number> {
  * @param jsonType - Requested storage type.
  * @returns Table schema, name and the effective storage type to load with.
  */
-// eslint-disable-next-line max-lines-per-function -- Table preparation covers both creation and validation paths.
+
 async function prepareTable(
   pool: oracledb.Pool,
   options: LoadOptions,
@@ -205,7 +205,7 @@ async function prepareTable(
  * @param jsonType - Resolved storage type.
  * @param progress - Progress tracker.
  */
-// eslint-disable-next-line max-lines-per-function -- Chunking and per-file progress accounting.
+
 async function loadFilesInChunks(
   pool: oracledb.Pool,
   files: DiscoveredFile[],
@@ -320,8 +320,11 @@ async function performLoad(
 
   const startTime = Date.now();
   const progress = createProgressTracker(files);
-  const { schemaName, tableName, jsonType: effectiveType } =
-    await prepareTable(pool, options, jsonType);
+  const {
+    schemaName,
+    tableName,
+    jsonType: effectiveType,
+  } = await prepareTable(pool, options, jsonType);
 
   if (!options.quiet) {
     console.log("Loading files...\n");

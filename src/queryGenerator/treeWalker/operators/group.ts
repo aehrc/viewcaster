@@ -7,12 +7,11 @@
  */
 
 import { mergeSiblings } from "../mergeSiblings.js";
-import {  walkColumnsOnly } from "./columnsOnly.js";
+import { walkColumnsOnly } from "./columnsOnly.js";
 
 import type { ViewDefinitionSelect } from "../../../types.js";
 import type { ColumnExpressionGenerator } from "../../ColumnExpressionGenerator.js";
 import type { Context, Fragment } from "../types.js";
-
 
 /**
  * Walker for Group nodes — visits each child select and merges their Fragments.
@@ -66,5 +65,4 @@ export function walkGroup(
 
 // Re-export so other operators can call into ColumnsOnly through Group.
 
-
-export {projectColumns} from "./columnsOnly.js";
+export { projectColumns } from "./columnsOnly.js";

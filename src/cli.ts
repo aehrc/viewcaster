@@ -25,7 +25,7 @@ async function readInput(inputFile?: string): Promise<string> {
 
   // Read from stdin.
   const chunks: Buffer[] = [];
-  for await (const chunk of process.stdin) {
+  for await (const chunk of process.stdin as AsyncIterable<Buffer>) {
     chunks.push(chunk);
   }
   return Buffer.concat(chunks).toString("utf8");
@@ -81,7 +81,7 @@ function createTranspileCommand(): Command {
           const input = await readInput(options.input);
 
           // Parse and validate JSON.
-          const viewDefinition: object = JSON.parse(input);
+          const viewDefinition: unknown = JSON.parse(input);
 
           // Validate the storage type before anything else, so an invalid
           // value never reaches the database-facing layers.
@@ -107,7 +107,7 @@ function createTranspileCommand(): Command {
               resourceJsonDataType,
             }),
           });
-          const result = sqlOnFhir.transpile(viewDefinition);
+          const result = sqlOnFhir.transpile(viewDefinition as object);
 
           // Write SQL to stdout or file. The SQL is exactly one SELECT
           // statement; nothing is written on failure (the write happens after

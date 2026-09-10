@@ -118,7 +118,9 @@ describe("buildCreateTableStatements", () => {
       );
       expect(statements.createTable).toContain("CREATE TABLE fhir.resources");
       expect(statements.createIndex).toContain("ix_resources_resource_type");
-      expect(statements.createIndex).toContain("ON fhir.resources (resource_type)");
+      expect(statements.createIndex).toContain(
+        "ON fhir.resources (resource_type)",
+      );
     });
   });
 });
@@ -181,7 +183,9 @@ describe("buildJsonTypeMismatchWarning", () => {
     expect(
       buildJsonTypeMismatchWarning(undefined, "t", "BLOB", "BLOB"),
     ).toBeNull();
-    expect(buildJsonTypeMismatchWarning("fhir", "t", "JSON", "JSON")).toBeNull();
+    expect(
+      buildJsonTypeMismatchWarning("fhir", "t", "JSON", "JSON"),
+    ).toBeNull();
   });
 
   it("returns a warning naming both types and the table when they differ", () => {

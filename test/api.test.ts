@@ -196,6 +196,6 @@ describe("parser round trip via public API", () => {
       status: "active",
       select: [{ column: [{ name: "id", path: "id" }] }],
     });
-    expect((viewDef).resource).toBe("Patient");
+    expect(viewDef.resource).toBe("Patient");
   });
 });

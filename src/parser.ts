@@ -19,7 +19,9 @@ export class ViewDefinitionParser {
    */
   static parseViewDefinition(json: string | object): ViewDefinition {
     const data: UnvalidatedViewDefinition =
-      typeof json === "string" ? JSON.parse(json) : json;
+      typeof json === "string"
+        ? (JSON.parse(json) as UnvalidatedViewDefinition)
+        : (json as UnvalidatedViewDefinition);
 
     if (this.isValidViewDefinition(data)) {
       return data;
@@ -33,13 +35,15 @@ export class ViewDefinitionParser {
    * @param json
    */
   static parseTestSuite(json: string | object): TestSuite {
-    const data = typeof json === "string" ? JSON.parse(json) : json;
+    const data = (
+      typeof json === "string" ? JSON.parse(json) : json
+    ) as TestSuite;
 
     if (!data.title || !data.resources || !data.tests) {
       throw new Error("Invalid test suite format. Missing required fields.");
     }
 
-    return data as TestSuite;
+    return data;
   }
 
   /**

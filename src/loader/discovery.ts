@@ -75,8 +75,10 @@ export function discoverFiles(options: LoadOptions): DiscoveryResult {
     }
 
     // Apply resource type filter if specified.
-    if (options.resourceType && metadata.resourceType !== options.resourceType)
- {
+    if (
+      options.resourceType &&
+      metadata.resourceType !== options.resourceType
+    ) {
       skipped.push({
         file: entry,
         reason: `resource type ${metadata.resourceType} does not match the requested type ${options.resourceType}`,

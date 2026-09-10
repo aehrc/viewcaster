@@ -51,7 +51,10 @@ export class ColumnExpressionGenerator {
       let expression: string;
 
       // Handle collection property.
-      expression = column.collection === true ? this.generateCollectionExpression(column.path, context) : Transpiler.transpile(column.path, context);
+      expression =
+        column.collection === true
+          ? this.generateCollectionExpression(column.path, context)
+          : Transpiler.transpile(column.path, context);
 
       // Handle type casting if specified.
       if (column.type && column.collection !== true) {
@@ -188,9 +191,7 @@ export class ColumnExpressionGenerator {
    * @param context - The transpiler context.
    * @returns The SQL expression.
    */
-  private buildNameFamilyCollectionQuery(
-    context: TranspilerContext,
-  ): string {
+  private buildNameFamilyCollectionQuery(context: TranspilerContext): string {
     const storage = context.resourceJsonDataType ?? "BLOB";
     const fmt = formatJsonSuffix(storage);
     const jsonColumn = context.resourceJsonColumn ?? "json";
@@ -204,9 +205,7 @@ export class ColumnExpressionGenerator {
    * @param context - The transpiler context.
    * @returns The SQL expression.
    */
-  private buildNameGivenCollectionQuery(
-    context: TranspilerContext,
-  ): string {
+  private buildNameGivenCollectionQuery(context: TranspilerContext): string {
     const storage = context.resourceJsonDataType ?? "BLOB";
     const fmt = formatJsonSuffix(storage);
     const jsonColumn = context.resourceJsonColumn ?? "json";
