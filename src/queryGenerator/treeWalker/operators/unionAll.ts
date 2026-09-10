@@ -66,14 +66,9 @@ export function walkUnionAll(
     if (fragment.kind === "union") {
       return fragment.branches ?? [];
     }
-    // Every leaf branch is a self-contained SELECT: it must re-establish the
-    // enclosing APPLY chain accumulated above this node.
-    return [
-      {
-        ...fragment,
-        fromExtensions: ctx.ancestorApplies + fragment.fromExtensions,
-      },
-    ];
+    // The enclosing APPLY chain is folded into every branch in the return
+    // below; keep the leaf fragment unchanged here.
+    return [fragment];
   });
 
   // The unionAll node's own column[] and sibling select[] entries belong to

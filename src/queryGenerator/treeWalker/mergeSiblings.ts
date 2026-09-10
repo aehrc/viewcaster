@@ -93,8 +93,10 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
       ctes: [...rowCtes, ...branch.ctes],
       // Row siblings' APPLY/JOIN chains come before the branch's own, and the
       // union fragment's branches already carry the enclosing ancestor chain.
+      // Their columns follow the branch's in the projection, matching select
+      // entry order.
       fromExtensions: rowFromExtensions + branch.fromExtensions,
-      columns: [...rowColumns, ...branch.columns],
+      columns: [...branch.columns, ...rowColumns],
     })),
   };
 }

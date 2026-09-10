@@ -78,8 +78,8 @@ ${recBlocks.join("\n  UNION ALL\n")}`;
     .concat("elem_path", "elem_order", "item_json", "item_scalar", "cyc", "depth")
     .join(", ");
   const cycleClause = `CYCLE ${args.partitionKeys
-    .map((k) => `${args.cteAlias}.${k.name}`)
-    .join(", ")}, ${args.cteAlias}.elem_path SET cyc TO '1' DEFAULT '0'`;
+    .map((k) => k.name)
+    .join(", ")}, elem_path SET cyc TO '1' DEFAULT '0'`;
   return { alias: args.cteAlias, body, columnList, cycleClause };
 }
 
