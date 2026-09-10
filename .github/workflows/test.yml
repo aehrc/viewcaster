@@ -1,0 +1,171 @@
+name: Build and test
+
+on:
+  push:
+  pull_request:
+
+env:
+  SQLONFHIR_TEST_PATH: ./sqlonfhir/tests
+  ORACLE_HOST: localhost
+  ORACLE_PORT: "1521"
+  ORACLE_USER: fhir
+  ORACLE_PASSWORD: fhir
+
+jobs:
+  # Oracle Database 19c Enterprise Edition. The image is a private, self-built
+  # package (OTN Developer Licence; see research R15), pulled with the
+  # workflow's GITHUB_TOKEN. Fork pull requests cannot read the package, so the
+  # job is skipped for them.
+  test-19c:
+    name: Oracle 19c EE (BLOB)
+    runs-on: ubuntu-latest
+    if: github.event_name != 'pull_request' || github.event.pull_request.head.repo.full_name == github.repository
+    permissions:
+      contents: read
+      packages: read
+    services:
+      oracle:
+        image: ghcr.io/aehrc/oracle-database-ee:19.3.0
+        credentials:
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+        env:
+          ORACLE_SID: ORCLCDB
+          ORACLE_PDB: ORCLPDB1
+          ORACLE_PWD: oracle
+          ORACLE_CHARACTERSET: AL32UTF8
+          INIT_SGA_SIZE: "1536"
+          INIT_PGA_SIZE: "512"
+          INIT_CPU_COUNT: "2"
+        ports:
+          - 1521:1521
+        options: >-
+          --shm-size=1g
+          --health-cmd "/opt/oracle/checkDBStatus.sh"
+          --health-interval 30s
+          --health-timeout 15s
+          --health-retries 60
+          --health-start-period 30m
+    env:
+      ORACLE_SERVICE_NAME: ORCLPDB1
+      ORACLE_RESOURCE_JSON_DATA_TYPE: BLOB
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build project
+        run: bun run build
+
+      - name: Lint
+        run: bun run lint
+
+      - name: Check formatting
+        run: bun run format:check
+
+      - name: Create application user
+        run: >-
+          sed "s/FREEPDB1/ORCLPDB1/" docker/init/01_create_user.sql
+          | docker exec -i ${{ job.services.oracle.id }} sqlplus -s / as sysdba
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-19c-blob
+          path: out/test-report.json
+          retention-days: 30
+
+  # Oracle Database 21c Express Edition and 23ai Free, pulled anonymously from
+  # the Oracle Container Registry under their free-use licences. Both support
+  # the native JSON type, so each version runs against both storage variants.
+  test-free:
+    name: Oracle ${{ matrix.label }} (${{ matrix.resource-json-data-type }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - label: 21c XE
+            image: container-registry.oracle.com/database/express:21.3.0-xe
+            service-name: XEPDB1
+            resource-json-data-type: BLOB
+            report-suffix: 21c-blob
+          - label: 21c XE
+            image: container-registry.oracle.com/database/express:21.3.0-xe
+            service-name: XEPDB1
+            resource-json-data-type: JSON
+            report-suffix: 21c-json
+          - label: 23ai Free
+            image: container-registry.oracle.com/database/free:latest
+            service-name: FREEPDB1
+            resource-json-data-type: BLOB
+            report-suffix: 23ai-blob
+          - label: 23ai Free
+            image: container-registry.oracle.com/database/free:latest
+            service-name: FREEPDB1
+            resource-json-data-type: JSON
+            report-suffix: 23ai-json
+    services:
+      oracle:
+        image: ${{ matrix.image }}
+        env:
+          ORACLE_PWD: oracle
+          ORACLE_CHARACTERSET: AL32UTF8
+        ports:
+          - 1521:1521
+        options: >-
+          --shm-size=1g
+          --health-cmd "/opt/oracle/checkDBStatus.sh"
+          --health-interval 30s
+          --health-timeout 15s
+          --health-retries 40
+          --health-start-period 10m
+    env:
+      ORACLE_SERVICE_NAME: ${{ matrix.service-name }}
+      ORACLE_RESOURCE_JSON_DATA_TYPE: ${{ matrix.resource-json-data-type }}
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Set up bun
+        uses: oven-sh/setup-bun@v2
+        with:
+          bun-version: latest
+
+      - name: Install dependencies
+        run: bun install --frozen-lockfile
+
+      - name: Build project
+        run: bun run build
+
+      - name: Create application user
+        run: >-
+          sed "s/FREEPDB1/${{ matrix.service-name }}/"
+          docker/init/01_create_user.sql
+          | docker exec -i ${{ job.services.oracle.id }} sqlplus -s / as sysdba
+
+      - name: Run tests
+        run: bun run test
+
+      - name: Upload test report artifact
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: test-report-${{ matrix.report-suffix }}
+          path: out/test-report.json
+          retention-days: 30
