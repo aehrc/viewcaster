@@ -46,7 +46,7 @@ export default defineConfig({
     },
     // Custom reporter writes the SQL on FHIR compliance report to
     // out/test-report.json.
-    reporters: ["default", "src/tests/utils/reporter"],
+    reporters: ["default", "test/support/reporter"],
     // Parallel test execution with a thread pool.
     pool: "threads",
     poolOptions: {

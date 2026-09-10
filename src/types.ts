@@ -147,37 +147,13 @@ export interface ViewDefinitionConstant {
   valueUri?: string;
   valueUrl?: string;
   valueUuid?: string;
-  valueAddress?: Address;
-  valueAge?: Age;
-  valueAnnotation?: Annotation;
-  valueAttachment?: Attachment;
   valueCodeableConcept?: CodeableConcept;
   valueCoding?: Coding;
-  valueContactPoint?: ContactPoint;
-  valueCount?: Count;
-  valueDistance?: Distance;
-  valueDuration?: Duration;
-  valueHumanName?: HumanName;
   valueIdentifier?: Identifier;
-  valueMoney?: Money;
-  valuePeriod?: Period;
   valueQuantity?: Quantity;
-  valueRange?: Range;
-  valueRatio?: Ratio;
-  valueRatioRange?: RatioRange;
   valueReference?: Reference;
-  valueSampledData?: SampledData;
-  valueSignature?: Signature;
-  valueTiming?: Timing;
   valueContactDetail?: ContactDetail;
-  valueContributor?: Contributor;
-  valueDataRequirement?: DataRequirement;
-  valueExpression?: Expression;
-  valueParameterDefinition?: ParameterDefinition;
-  valueRelatedArtifact?: RelatedArtifact;
-  valueTriggerDefinition?: TriggerDefinition;
   valueUsageContext?: UsageContext;
-  valueDosage?: Dosage;
 }
 
 // Supporting FHIR types
@@ -207,7 +183,6 @@ export interface UsageContext {
   code: Coding;
   valueCodeableConcept?: CodeableConcept;
   valueQuantity?: Quantity;
-  valueRange?: Range;
   valueReference?: Reference;
 }
 
@@ -248,29 +223,6 @@ export interface Range {
   low?: Quantity;
   high?: Quantity;
 }
-
-// Placeholder interfaces for other FHIR types
-export interface Address {}
-export interface Age {}
-export interface Annotation {}
-export interface Attachment {}
-export interface Count {}
-export interface Distance {}
-export interface Duration {}
-export interface HumanName {}
-export interface Money {}
-export interface Ratio {}
-export interface RatioRange {}
-export interface SampledData {}
-export interface Signature {}
-export interface Timing {}
-export interface Contributor {}
-export interface DataRequirement {}
-export interface Expression {}
-export interface ParameterDefinition {}
-export interface RelatedArtifact {}
-export interface TriggerDefinition {}
-export interface Dosage {}
 
 /**
  * Test case structure from the SQL on FHIR repository.
