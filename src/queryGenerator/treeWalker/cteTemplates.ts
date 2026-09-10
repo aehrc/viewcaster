@@ -69,10 +69,10 @@ export interface BuildRepeatCteArgs {
  */
 export function buildRepeatCte(args: BuildRepeatCteArgs): CteDefinition {
   const anchor = buildAnchorMember(args);
-  const recBlocks = args.paths.map((p, i) => buildRecursiveMember(args, p, i));
+  const recBlock = buildRecursiveMember(args);
   const body = `${anchor}
   UNION ALL
-${recBlocks.join("\n  UNION ALL\n")}`;
+${recBlock}`;
   const columnList = args.partitionKeys
     .map((k) => k.name)
     .concat("elem_path", "elem_order", "item_json", "item_scalar", "depth")
@@ -110,28 +110,28 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
   ${chain.applyClauses}${wherePart}`;
 }
 
-function buildRecursiveMember(
-  args: BuildRepeatCteArgs,
-  path: string,
-  index: number,
-): string {
-  const { cteAlias, partitionKeys, storage } = args;
+function buildRecursiveMember(args: BuildRepeatCteArgs): string {
+  const { cteAlias, partitionKeys, storage, paths } = args;
   const head = qualifiedKeyCols("cte", partitionKeys);
-  const chain = buildJsonTableChain(
-    "cte.item_json",
-    path,
-    `child_${index}`,
-    storage,
-  );
+  const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
+  const chains = paths
+    .map(
+      (path) =>
+        `      SELECT child.value AS v, child.idx AS idx, child.scalar AS scalar
+        FROM JSON_TABLE(cte.item_json FORMAT JSON, '$.${path}[*]' COLUMNS (idx FOR ORDINALITY, value ${fmt} PATH '$', scalar VARCHAR2(4000) PATH '$')) child`,
+    )
+    .join("\n      UNION ALL\n");
   return `  SELECT
     ${head},
-    cte.elem_path || '.' || CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS elem_path,
-    cte.elem_order || '.' || ${orderSegment(chain.lastAlias)} AS elem_order,
-    ${chain.lastAlias}.value AS item_json,
-    ${chain.lastAlias}.scalar AS item_scalar,
+    cte.elem_path || '.' || CAST(u.idx AS VARCHAR2(4000)) AS elem_path,
+    cte.elem_order || '.' || LPAD(CAST(u.idx AS VARCHAR2(10)), 10, '0') AS elem_order,
+    u.v AS item_json,
+    u.scalar AS item_scalar,
     cte.depth + 1
   FROM ${cteAlias} cte
-  ${chain.applyClauses}`;
+  CROSS APPLY (
+${chains}
+  ) u`;
 }
 
 /**
