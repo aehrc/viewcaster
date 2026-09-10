@@ -8,7 +8,7 @@
  * @author John Grimes
  */
 
-import { TranspilerContext } from "./fhirpath/transpiler.js";
+import type { TranspilerContext } from "./fhirpath/transpiler.js";
 import { compileViewDefinition } from "./queryGenerator/treeWalker/index.js";
 import {
   TranspilationResult,

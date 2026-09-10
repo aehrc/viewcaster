@@ -7,7 +7,7 @@
  * @author John Grimes
  */
 
-import { Transpiler, TranspilerContext } from "../../fhirpath/transpiler.js";
+import { Transpiler, type TranspilerContext } from "../../fhirpath/transpiler.js";
 import type {
   ColumnInfo,
   TranspilationResult,

@@ -77,17 +77,11 @@ export function walkForEach(
   };
   const inner = walk(innerNode, innerCtx);
 
-  // A unionAll child becomes top-level UNION ALL branches; each branch must
-  // re-establish this forEach's APPLY chain itself (see walkUnionAll), so the
-  // plain fromExtensions concatenation only applies to row fragments.
+  // Union children re-establish this forEach's APPLY chain via
+  // ancestorApplies (set in buildInnerCtx), so only row fragments concatenate
+  // the clause directly.
   if (inner.kind === "union") {
-    return {
-      ...inner,
-      branches: inner.branches?.map((b) => ({
-        ...b,
-        fromExtensions: applyClause + b.fromExtensions,
-      })),
-    };
+    return inner;
   }
 
   return {

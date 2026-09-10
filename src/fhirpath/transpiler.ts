@@ -35,10 +35,10 @@ import {
 } from "../generated/grammar/fhirpathParser";
 import type { ViewDefinitionColumnTag } from "../types.js";
 import { validateAnsiSqlType, validateOracleType } from "../validation.js";
-import { FHIRPathToOracleVisitor, TranspilerContext } from "./visitor";
+import { FHIRPathToOracleVisitor, type TranspilerContext } from "./visitor";
 
-// Re-export TranspilerContext from visitor
-export { TranspilerContext } from "./visitor";
+// Re-export TranspilerContext type from visitor
+export type { TranspilerContext } from "./visitor";
 
 export class Transpiler {
   /**

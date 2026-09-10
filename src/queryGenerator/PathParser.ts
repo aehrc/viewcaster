@@ -2,7 +2,7 @@
  * Parses and interprets FHIRPath expressions for SQL generation.
  */
 
-import { Transpiler, TranspilerContext } from "../fhirpath/transpiler.js";
+import { Transpiler, type TranspilerContext } from "../fhirpath/transpiler.js";
 
 /**
  * Result of parsing a FHIRPath expression with .where() function.

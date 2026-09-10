@@ -50,7 +50,7 @@ describe("Oracle column emission", () => {
   it("emits JSON_VALUE with FORMAT JSON and RETURNING in BLOB mode", () => {
     const { sql } = transpileColumn({ name: "family", path: "name.family" });
     expect(sql).toContain(
-      `JSON_VALUE(r.json FORMAT JSON, '$.name.family' RETURNING VARCHAR2(4000)) AS "family"`,
+      `JSON_VALUE(r.json FORMAT JSON, '$.name[0].family' RETURNING VARCHAR2(4000)) AS "family"`,
     );
   });
 
@@ -59,7 +59,7 @@ describe("Oracle column emission", () => {
       { name: "family", path: "name.family" },
       { resourceJsonDataType: "json" },
     );
-    expect(sql).toContain(`JSON_VALUE(r.json, '$.name.family'`);
+    expect(sql).toContain(`JSON_VALUE(r.json, '$.name[0].family'`);
     expect(sql).not.toContain("FORMAT JSON");
   });
 

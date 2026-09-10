@@ -4,8 +4,8 @@
  * @author John Grimes
  */
 
-import { Transpiler, TranspilerContext } from "../fhirpath/transpiler.js";
-import { ViewDefinitionWhere } from "../types.js";
+import { Transpiler, type TranspilerContext } from "../fhirpath/transpiler.js";
+import type { ViewDefinitionWhere } from "../types.js";
 import { validateResourceType } from "../validation.js";
 
 /**
@@ -13,16 +13,14 @@ import { validateResourceType } from "../validation.js";
  */
 export class WhereClauseBuilder {
   /**
-   * Build complete WHERE clause combining resource type filter and view-level
-   * filters. Validates inputs to prevent SQL injection.
+   * Build complete WHERE clause combining the resource type filter, the
+   * optional test-id filter, and view-level filters. Validates inputs to
+   * prevent SQL injection.
    *
    * @param resourceType - The FHIR resource type being queried.
    * @param resourceAlias - The alias the resources table is referenced by.
-   * @param testId - Unused on Oracle (the test harness uses dedicated table
-   *   names for isolation); retained for signature parity with the reference.
-   * @param whereConditions - View-level WHERE conditions.
-   * @param context - The transpiler context for FHIRPath translation.
-   * @returns The WHERE clause, or null when no conditions apply.
+   * @param testId - Optional test-isolation identifier (only used in the test
+   *   table, which carries a test_id column).
    */
   buildWhereClause(
     resourceType: string,
@@ -33,13 +31,18 @@ export class WhereClauseBuilder {
   ): string | null {
     const conditions: string[] = [];
 
+    // Validate and add test_id filter for concurrent test isolation (only
+    // used in the test table, which carries a test_id column).
+    if (testId) {
+      if (!/^[A-Za-z0-9_-]+$/.test(testId)) {
+        throw new Error(`Invalid test id: '${testId}'.`);
+      }
+      conditions.push(`${resourceAlias}.test_id = '${testId}'`);
+    }
+
     // Validate and add resource type filter.
     validateResourceType(resourceType);
-    conditions.push(
-      `${resourceAlias}.resource_type = '${resourceType}'`,
-    );
-
-    void testId;
+    conditions.push(`${resourceAlias}.resource_type = '${resourceType}'`);
 
     // Add view-level WHERE conditions.
     const viewWhereClause = this.generateViewWhereClause(

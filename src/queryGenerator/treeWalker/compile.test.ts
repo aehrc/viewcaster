@@ -165,7 +165,7 @@ describe("tree walker Oracle emission", () => {
       "CROSS APPLY JSON_TABLE(r.json FORMAT JSON, '$.contact[*]' COLUMNS",
     );
     expect(sql).toContain(
-      "JSON_VALUE(forEach_0.value FORMAT JSON, '$.telecom.system' RETURNING VARCHAR2(4000))",
+      "JSON_VALUE(forEach_0.value FORMAT JSON, '$.telecom[0].system' RETURNING VARCHAR2(4000))",
     );
   });
 

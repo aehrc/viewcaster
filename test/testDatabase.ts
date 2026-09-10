@@ -135,6 +135,7 @@ export async function createTestTable(
     `CREATE TABLE ${tableName} (
   id            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
   resource_type VARCHAR2(64) NOT NULL,
+  test_id       VARCHAR2(255) NOT NULL,
   ${jsonColumn}
 )`,
   );
@@ -215,13 +216,14 @@ export async function insertTestResources(
 /**
  * Inserts one FHIR resource into the test table and returns the generated
  * surrogate id, so integration tests can clean up exactly the rows they
- * inserted (the table has no test-id column).
+ * inserted.
  *
  * For `BLOB` storage the resource is serialised with lossless-json and bound
  * as a UTF-8 Buffer; for native `JSON` storage it is bound directly as
  * `DB_TYPE_JSON`.
  * @param connection - An open connection.
  * @param resource - The FHIR resource; must carry `resourceType`.
+ * @param testId - Test-isolation identifier stored with the row.
  * @param storageType - JSON column storage variant of the target table.
  * @param tableName - Table name; defaults to {@link TEST_TABLE_NAME}.
  * @returns The generated id.
@@ -229,6 +231,7 @@ export async function insertTestResources(
 export async function insertTestResourceReturningId(
   connection: oracledb.Connection,
   resource: { resourceType: string },
+  testId: string,
   storageType: StorageType,
   tableName: string = TEST_TABLE_NAME,
 ): Promise<number> {
@@ -237,8 +240,13 @@ export async function insertTestResourceReturningId(
       ? resource
       : Buffer.from(losslessStringify(resource) ?? "null", "utf8");
   const result = await connection.execute(
-    `INSERT INTO ${tableName} (resource_type, json) VALUES (:1, :2) RETURNING id INTO :3`,
-    [resource.resourceType, json, { type: oracledb.DB_TYPE_NUMBER, dir: oracledb.BIND_OUT }],
+    `INSERT INTO ${tableName} (resource_type, test_id, json) VALUES (:1, :2, :3) RETURNING id INTO :4`,
+    [
+      resource.resourceType,
+      testId,
+      json,
+      { type: oracledb.DB_TYPE_NUMBER, dir: oracledb.BIND_OUT },
+    ],
     { autoCommit: true },
   );
   const outBinds = result.outBinds as unknown[][] | undefined;

@@ -474,11 +474,39 @@ export class FHIRPathToOracleVisitor
   }
 
   visitThisInvocation(_ctx: ThisInvocationContext): string {
-    // $this refers to the current item in an iteration context
+    // $this refers to the current item in an iteration context. A JSON_TABLE
+    // iteration exposes both the element's JSON text (`value`, for navigation)
+    // and its scalar text (`scalar`, matching T-SQL OPENJSON's unquoted
+    // `value`); FHIRPath $this is the scalar view.
     if (this.context.iterationContext) {
-      return this.context.iterationContext;
+      const iteration = this.context.iterationContext;
+      const scalar = this.scalarVariant(iteration);
+      return scalar ?? iteration;
     }
     return this.rootJson;
+  }
+
+  /**
+   * Maps an iteration source to its scalar (unquoted text) column variant:
+   * `value` to `scalar`, `alias.value` to `alias.scalar`, and
+   * `cte.item_json` to `cte.item_scalar`.
+   *
+   * @param source - The iteration source expression.
+   * @returns The scalar column reference, or null when not applicable.
+   */
+  private scalarVariant(source: string): string | null {
+    if (source === "value") {
+      return "scalar";
+    }
+    const valueMatch = /^(.+)\.value$/.exec(source);
+    if (valueMatch) {
+      return `${valueMatch[1]}.scalar`;
+    }
+    const itemMatch = /^(.+)\.item_json$/.exec(source);
+    if (itemMatch) {
+      return `${itemMatch[1]}.item_scalar`;
+    }
+    return null;
   }
 
   visitIndexInvocation(_ctx: IndexInvocationContext): string {
@@ -646,7 +674,37 @@ export class FHIRPathToOracleVisitor
       return this.handleJsonQueryMember(base, memberName);
     }
 
+    // A scalar iteration column ($this.member): re-target the same row's JSON
+    // text column so the member path can be extracted.
+    const jsonSource = this.jsonVariant(base);
+    if (jsonSource) {
+      return `JSON_VALUE(${jsonSource}, '$.${memberName}')`;
+    }
+
     return `JSON_VALUE(${base}, '$.${memberName}')`;
+  }
+
+  /**
+   * Maps a scalar iteration column reference back to its JSON text column:
+   * `scalar` to `value`, `alias.scalar` to `alias.value`, and
+   * `cte.item_scalar` to `cte.item_json`.
+   *
+   * @param source - The scalar column reference.
+   * @returns The JSON column reference, or null when not applicable.
+   */
+  private jsonVariant(source: string): string | null {
+    if (source === "scalar") {
+      return "value";
+    }
+    const scalarMatch = /^(.+)\.scalar$/.exec(source);
+    if (scalarMatch) {
+      return `${scalarMatch[1]}.value`;
+    }
+    const itemMatch = /^(.+)\.item_scalar$/.exec(source);
+    if (itemMatch) {
+      return `${itemMatch[1]}.item_json`;
+    }
+    return null;
   }
 
   private handleJsonQueryMember(base: string, memberName: string): string {
@@ -683,6 +741,7 @@ export class FHIRPathToOracleVisitor
     isForEachValue: boolean,
   ): boolean {
     const alwaysArrayFields = this.getAlwaysArrayFields();
+    const contextDependentFields = ["name"];
 
     const indexPattern = /\[\d+]/;
     const pathSegments = existingPath
@@ -690,14 +749,14 @@ export class FHIRPathToOracleVisitor
       .filter((s) => s !== "$" && !indexPattern.exec(s));
     const lastSegment = pathSegments[pathSegments.length - 1];
 
-    // Within a forEach iteration the source is already at the element level:
-    // nested array navigation stays on the unindexed path, which the official
-    // suite exercises through the iteration's own JSON_TABLE.
-    if (isForEachValue) {
-      return false;
-    }
+    const previousFieldIsAlwaysArray =
+      !!lastSegment && alwaysArrayFields.includes(lastSegment);
+    const previousFieldIsContextArray =
+      !!lastSegment &&
+      contextDependentFields.includes(lastSegment) &&
+      !isForEachValue;
 
-    return !!lastSegment && alwaysArrayFields.includes(lastSegment);
+    return previousFieldIsAlwaysArray || previousFieldIsContextArray;
   }
 
   private checkCurrentMemberIsArray(
@@ -833,9 +892,9 @@ export class FHIRPathToOracleVisitor
     pathParts: string[],
     existingPath: string,
   ): boolean {
-    // Add [0] only for known FHIR array fields (other than `name`, which is
-    // an object in some contexts), and never in a forEach iteration context
-    // where the field may be the iterated collection itself.
+    // Add [0] for known FHIR array fields; `name` is context-dependent (an
+    // array at Patient level, an object within Contact) and gains [0] only
+    // outside a forEach iteration context (reference behaviour).
     const knownArrayFields = [
       "telecom",
       "address",
@@ -849,12 +908,15 @@ export class FHIRPathToOracleVisitor
       return false;
     }
 
-    if (this.context.iterationContext) {
-      return false;
+    const fieldName = pathParts[1];
+
+    if (knownArrayFields.includes(fieldName)) {
+      return !this.context.forEachPath?.endsWith(fieldName);
+    } else if (fieldName === "name") {
+      return !this.context.iterationContext;
     }
 
-    const fieldName = pathParts[1];
-    return knownArrayFields.includes(fieldName);
+    return false;
   }
 
   private handleFunctionInvocation(

@@ -120,6 +120,7 @@ function buildRecursiveMember(
     cte.__path || '.' || CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS __path,
     cte.__order || '.' || ${orderSegment(chain.lastAlias)} AS __order,
     ${chain.lastAlias}.value AS item_json,
+    ${chain.lastAlias}.scalar AS item_scalar,
     cte.depth + 1
   FROM ${cteAlias} cte
   ${chain.applyClauses}`;

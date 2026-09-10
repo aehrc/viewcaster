@@ -2,7 +2,7 @@
  * Parser for ViewDefinition JSON structures.
  */
 
-import {
+import type {
   TestSuite,
   UnvalidatedColumn,
   UnvalidatedSelect,

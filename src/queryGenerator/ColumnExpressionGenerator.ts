@@ -23,13 +23,12 @@
  * The default type mapping treats text as the preservation medium (research
  * R9): boolean becomes a CASE over the 'true'/'false' text yielding
  * NUMBER(1), and numeric/temporal FHIR types are CAST to their Oracle
- * equivalents from the extracted text. Expressions that already yield a
- * SQL-native type (no JSON extraction involved) are cast only via their
- * mapped type when a type is declared.
+ * equivalents from the extracted text.
  */
 
+import { formatJsonSuffix } from "../fhirpath/visitor.js";
 import { Transpiler, TranspilerContext } from "../fhirpath/transpiler.js";
-import { ViewDefinitionColumn } from "../types.js";
+import type { ViewDefinitionColumn } from "../types.js";
 
 /**
  * Handles generation of column expressions with type casting.
@@ -75,12 +74,12 @@ export class ColumnExpressionGenerator {
    * Apply type casting to an expression.
    *
    * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
-   * Casting applies only to text-extracted values; expressions that are
-   * already SQL-native (e.g. `%rowIndex` arithmetic) are left alone because
-   * they carry no text round-trip.
+   * Casting applies only to text-extracted values; expressions already
+   * yielding SQL-native values (e.g. `%rowIndex` arithmetic) stand.
    *
    * @param expression - The SQL expression yielding the raw value.
-   * @param column - The column descriptor carrying the type and tags.
+   * @param column - The ViewDefinition column descriptor carrying the type
+   *   and tags.
    * @returns The expression cast to the mapped Oracle type.
    */
   private applyTypeCasting(
@@ -140,7 +139,7 @@ export class ColumnExpressionGenerator {
    *
    * @param path - The FHIRPath of the collection.
    * @param context - The transpiler context.
-   * @returns A JSON_QUERY expression yielding the array.
+   * @returns A SQL expression yielding the JSON array text.
    */
   private generateCollectionExpression(
     path: string,
@@ -150,7 +149,79 @@ export class ColumnExpressionGenerator {
       return `JSON_QUERY(${context.iterationContext}, '$.${path}')`;
     }
 
+    return this.buildCollectionJsonPath(path, context);
+  }
+
+  /**
+   * Build a JSON path expression for collection=true.
+   *
+   * `name.family` and `name.given` aggregate across all `name` elements into
+   * one array (reference behaviour); other paths yield the whole collection
+   * node via JSON_QUERY.
+   *
+   * @param path - The FHIRPath of the collection.
+   * @param context - The transpiler context.
+   * @returns A SQL expression yielding the JSON array text.
+   */
+  private buildCollectionJsonPath(
+    path: string,
+    context: TranspilerContext,
+  ): string {
+    const pathParts = path.split(".");
+
+    if (
+      pathParts.length === 2 &&
+      pathParts[0] === "name" &&
+      pathParts[1] === "family"
+    ) {
+      return this.buildNameFamilyCollectionQuery(context);
+    }
+
+    if (
+      pathParts.length === 2 &&
+      pathParts[0] === "name" &&
+      pathParts[1] === "given"
+    ) {
+      return this.buildNameGivenCollectionQuery(context);
+    }
+
     const jsonColumn = context.resourceJsonColumn ?? "json";
     return `JSON_QUERY(${context.resourceAlias}.${jsonColumn}, '$.${path}')`;
+  }
+
+  /**
+   * Build a collection query for the name.family path: an array of every
+   * Patient name's family across all name elements. An empty collection yields
+   * `[]` (JSON_ARRAYAGG yields NULL over an empty set).
+   *
+   * @param context - The transpiler context.
+   * @returns The SQL expression.
+   */
+  private buildNameFamilyCollectionQuery(
+    context: TranspilerContext,
+  ): string {
+    const storage = context.resourceJsonDataType ?? "BLOB";
+    const fmt = formatJsonSuffix(storage);
+    const jsonColumn = context.resourceJsonColumn ?? "json";
+    return `(SELECT COALESCE(JSON_ARRAYAGG(scalar ORDER BY idx), JSON_QUERY('[]' FORMAT JSON))
+      FROM JSON_TABLE(${context.resourceAlias}.${jsonColumn}${fmt}, '$.name[*]' COLUMNS (idx FOR ORDINALITY, scalar VARCHAR2(4000) PATH '$.family')))`;
+  }
+
+  /**
+   * Build a collection query for the name.given path: an array of every given
+   * across all name elements (nested JSON_TABLE, wrapped per ORA-40556).
+   *
+   * @param context - The transpiler context.
+   * @returns The SQL expression.
+   */
+  private buildNameGivenCollectionQuery(
+    context: TranspilerContext,
+  ): string {
+    const storage = context.resourceJsonDataType ?? "BLOB";
+    const fmt = formatJsonSuffix(storage);
+    const jsonColumn = context.resourceJsonColumn ?? "json";
+    return `(SELECT COALESCE(JSON_ARRAYAGG(n.scalar ORDER BY p.idx, n.idx), JSON_QUERY('[]' FORMAT JSON))
+      FROM JSON_TABLE(${context.resourceAlias}.${jsonColumn}${fmt}, '$.name[*]' COLUMNS (idx FOR ORDINALITY, value CLOB${fmt} PATH '$')) p
+      CROSS APPLY JSON_TABLE(JSON_QUERY(p.value${fmt}, '$.given' RETURNING CLOB), '$[*]' COLUMNS (idx FOR ORDINALITY, scalar VARCHAR2(4000) PATH '$')) n)`;
   }
 }

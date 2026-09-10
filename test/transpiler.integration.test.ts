@@ -109,10 +109,12 @@ async function cleanupTestDatabase(): Promise<void> {
  * Inserts the suite's resources, returning the generated ids for cleanup.
  *
  * @param resources - Resources parsed losslessly upstream.
+ * @param testId - Test-isolation identifier stored with the rows.
  * @returns The inserted surrogate ids.
  */
 async function insertSuiteResources(
   resources: Record<string, unknown>[],
+  testId: string,
 ): Promise<number[]> {
   if (!connection) throw new Error("Database not connected");
   const ids: number[] = [];
@@ -121,6 +123,7 @@ async function insertSuiteResources(
       await insertTestResourceReturningId(
         connection,
         resource as { resourceType: string },
+        testId,
         storage,
         TEST_TABLE_NAME,
       ),
@@ -153,15 +156,19 @@ interface ExecutionResult {
  * Transpiles a ViewDefinition and executes it on Oracle.
  *
  * @param viewDef - The parsed ViewDefinition.
+ * @param testId - The test-isolation identifier used to insert the rows.
  * @returns The rows and the output column names in SQL order.
  */
-async function executeViewDefinition(viewDef: ViewDefinition): Promise<ExecutionResult> {
+async function executeViewDefinition(
+  viewDef: ViewDefinition,
+  testId: string,
+): Promise<ExecutionResult> {
   if (!connection) throw new Error("Database not connected");
   const sqlOnFhir = new SqlOnFhir({
     tableName: TEST_TABLE_NAME,
     resourceJsonDataType: storage,
   });
-  const result = sqlOnFhir.transpile(viewDef);
+  const result = sqlOnFhir.transpile(viewDef, testId);
   const queryResult = await connection.execute<Record<string, unknown>>(result.sql);
   const columns = (queryResult.metaData ?? []).map((m) => m.name);
   return {
@@ -172,7 +179,6 @@ async function executeViewDefinition(viewDef: ViewDefinition): Promise<Execution
     columns,
   };
 }
-
 /**
  * Extracts boolean-typed column names from a ViewDefinition.
  *
@@ -364,11 +370,19 @@ function compareResults(
       (actualResults.length > 0 ? Object.keys(actualResults[0]) : []);
     if (!arraysEqual(columnsToCheck, expectedColumns)) return false;
   }
+  // Sort by a canonical form (keys sorted) so differing column order between
+  // actual and expected rows cannot misalign the positional pairing.
+  const canonical = (row: Record<string, unknown>) =>
+    JSON.stringify(
+      Object.keys(row)
+        .sort()
+        .map((key) => [key, row[key]]),
+    );
   const sortedActual = [...actualResults].sort((x, y) =>
-    JSON.stringify(x).localeCompare(JSON.stringify(y)),
+    canonical(x).localeCompare(canonical(y)),
   );
   const sortedExpected = [...expectedResults].sort((x, y) =>
-    JSON.stringify(x).localeCompare(JSON.stringify(y)),
+    canonical(x).localeCompare(canonical(y)),
   );
   if (sortedActual.length !== sortedExpected.length) return false;
   return sortedActual.every((row, i) => deepEqual(row, sortedExpected[i]));
@@ -449,11 +463,15 @@ describe.skipIf(!hasOracleEnvironment())(
               result: { passed: true },
             };
             let insertedIds: number[] = [];
+            const testId = `t_${testCase.title.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100)}_${Math.random().toString(36).slice(2, 10)}`;
             try {
-              insertedIds = await insertSuiteResources(suite.resources);
+              insertedIds = await insertSuiteResources(suite.resources, testId);
               if (testCase.expectError) {
                 try {
-                  await executeViewDefinition(testCase.view as ViewDefinition);
+                  await executeViewDefinition(
+                    testCase.view as ViewDefinition,
+                    testId,
+                  );
                   entry.result = {
                     passed: false,
                     error: "Expected an error but the test passed",
@@ -467,6 +485,7 @@ describe.skipIf(!hasOracleEnvironment())(
               }
               const result = await executeViewDefinition(
                 testCase.view as ViewDefinition,
+                testId,
               );
               const passed = compareResults(
                 result.results,
