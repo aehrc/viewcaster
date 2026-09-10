@@ -194,7 +194,7 @@ class SqlOnFhirReporter implements Reporter {
       for (const task of file.tasks) {
         if (
           task.type === "suite" &&
-          task.name === "SQL on FHIR compliance tests"
+          task.name.startsWith("SQL on FHIR compliance tests")
         ) {
           this.collectTestsFromParentSuite(task);
         }
