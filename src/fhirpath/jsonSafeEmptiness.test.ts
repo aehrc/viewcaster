@@ -30,11 +30,11 @@
  */
 
 import { describe, expect, it } from "vitest";
+
 import { SqlOnFhir } from "../index";
 
 /**
  * Transpile a single boolean column for the given FHIRPath expression.
- *
  * @param path - The FHIRPath expression to transpile.
  * @returns The generated SQL (default BLOB storage mode).
  */

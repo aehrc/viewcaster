@@ -16,7 +16,6 @@ import type { Context, Fragment, ProjectedColumn } from "../types.js";
  * Delegates expression generation to `ColumnExpressionGenerator`, which
  * translates each column's FHIRPath expression into a T-SQL expression
  * relative to the current transpiler context (iteration source, aliases, etc.).
- *
  * @param columns - The column descriptors from the ViewDefinition select node.
  * @param ctx - The current walker context supplying the transpiler context
  *   used for FHIRPath-to-SQL translation.
@@ -42,7 +41,6 @@ export function projectColumns(
  * Produces a Fragment with no CTEs, no FROM extensions, and columns derived
  * from `node.column[]` via `projectColumns`.  If `node.column` is absent or
  * empty, the returned Fragment has an empty columns array.
- *
  * @param node - The leaf select node whose `column[]` array is projected.
  * @param ctx - The current walker context supplying partition keys and the
  *   transpiler context for expression generation.

@@ -42,7 +42,6 @@ export interface UnionAllDeps {
  * same select's `column[]` and sibling `select[]` entries, which must appear
  * in every branch per the SQL on FHIR unionAll semantics) are distributed into
  * each branch by `mergeSiblings` at the parent scope.
- *
  * @param node - The unionAll select node.
  * @param ctx - The current walker context supplying the enclosing APPLY chain.
  * @param walk - The recursive walk function used to visit branches.

@@ -45,6 +45,8 @@ export class PathParser {
 
   /**
    * Find the matching closing parenthesis for .where() using balanced counting.
+   * @param path
+   * @param whereStart
    */
   private findWhereClosingParen(path: string, whereStart: number): number {
     let parenCount = 0;
@@ -65,6 +67,8 @@ export class PathParser {
 
   /**
    * Transpile a where condition to SQL.
+   * @param condition
+   * @param context
    */
   private transpileWhereCondition(
     condition: string,
@@ -88,6 +92,8 @@ export class PathParser {
   /**
    * Parse FHIRPath .where() function from a forEach path.
    * Transpiles the where condition to SQL using the FHIRPath transpiler.
+   * @param path
+   * @param context
    */
   parseFhirPathWhere(
     path: string,
@@ -98,7 +104,7 @@ export class PathParser {
       return { path, whereCondition: null, useFirst: false };
     }
 
-    const basePath = path.substring(0, whereIndex);
+    const basePath = path.slice(0, Math.max(0, whereIndex));
     const whereStart = whereIndex + 7; // Position after ".where(".
     const conditionEnd = this.findWhereClosingParen(path, whereStart);
 
@@ -107,7 +113,7 @@ export class PathParser {
     }
 
     const condition = path.substring(whereStart, conditionEnd).trim();
-    let remainingPath = path.substring(conditionEnd + 1);
+    let remainingPath = path.slice(Math.max(0, conditionEnd + 1));
 
     // Detect .first() to apply TOP 1 in SQL generation.
     const useFirst = remainingPath === ".first()";
@@ -136,6 +142,7 @@ export class PathParser {
   /**
    * Parse array indexing from a forEach path.
    * For paths like "contact.telecom[0]", interpret as "contact[0].telecom[0]" - apply index to all array segments.
+   * @param path
    */
   parseArrayIndexing(path: string): ArrayIndexingResult {
     const match = /^(.+)\[(\d+)]$/.exec(path);
@@ -144,7 +151,7 @@ export class PathParser {
     }
 
     const basePath = match[1];
-    const arrayIndex = parseInt(match[2], 10);
+    const arrayIndex = Number.parseInt(match[2], 10);
 
     // Check if this is a multi-segment path (e.g., contact.telecom[0]).
     const segments = basePath.split(".");
@@ -174,18 +181,20 @@ export class PathParser {
 
   /**
    * Parse array indexing from a path segment.
+   * @param pathSegment
    */
   parseSegmentIndexing(pathSegment: string): SegmentIndexingResult {
     const segmentMatch = /^(.+)\[(\d+)]$/.exec(pathSegment);
     return {
       cleanSegment: segmentMatch ? segmentMatch[1] : pathSegment,
-      segmentIndex: segmentMatch ? parseInt(segmentMatch[2], 10) : null,
+      segmentIndex: segmentMatch ? Number.parseInt(segmentMatch[2], 10) : null,
     };
   }
 
   /**
    * Detect if a forEach path requires array flattening.
    * Returns array of path segments that are arrays in FHIR Patient resource.
+   * @param path
    */
   detectArrayFlatteningPaths(path: string): string[] {
     const segments = path.split(".");
@@ -205,12 +214,14 @@ export class PathParser {
 
   /**
    * Extract path segment for a specific level in array paths.
+   * @param arrayPaths
+   * @param index
    */
   extractPathSegment(arrayPaths: string[], index: number): string {
     const fullPath = arrayPaths[index];
     const previousPath = index > 0 ? arrayPaths[index - 1] : "";
     return previousPath
-      ? fullPath.substring(previousPath.length + 1)
+      ? fullPath.slice(Math.max(0, previousPath.length + 1))
       : fullPath;
   }
 }

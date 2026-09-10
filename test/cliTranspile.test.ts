@@ -24,10 +24,10 @@
  * written on success.
  */
 
-import { spawnSync } from "child_process";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { spawnSync } from "node:child_process";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 const VALID_VIEW = JSON.stringify({
@@ -58,7 +58,6 @@ afterAll(() => {
 
 /**
  * Run the transpile subcommand with the given arguments and stdin.
- *
  * @param args - CLI arguments after the subcommand.
  * @param stdin - Optional stdin content.
  * @returns The spawn result.

@@ -16,7 +16,6 @@ import type { Context } from "./types.js";
  * the counter is shared, aliases produced across different branches and depths
  * of the tree are guaranteed to be distinct within a single
  * `compileViewDefinition` call.
- *
  * @param ctx - The current walker context; its `cteCounter.value` is
  *   incremented as a side effect.
  * @param prefix - A human-readable prefix that identifies the operator

@@ -26,8 +26,9 @@
  * equivalents from the extracted text.
  */
 
-import { formatJsonSuffix } from "../fhirpath/visitor.js";
 import { Transpiler, TranspilerContext } from "../fhirpath/transpiler.js";
+import { formatJsonSuffix } from "../fhirpath/visitor.js";
+
 import type { ViewDefinitionColumn } from "../types.js";
 
 /**
@@ -36,7 +37,6 @@ import type { ViewDefinitionColumn } from "../types.js";
 export class ColumnExpressionGenerator {
   /**
    * Generate SQL expression for a column.
-   *
    * @param column - The ViewDefinition column descriptor.
    * @param context - The transpiler context (aliases, storage type).
    * @returns The SQL expression for the column.
@@ -51,11 +51,7 @@ export class ColumnExpressionGenerator {
       let expression: string;
 
       // Handle collection property.
-      if (column.collection === true) {
-        expression = this.generateCollectionExpression(column.path, context);
-      } else {
-        expression = Transpiler.transpile(column.path, context);
-      }
+      expression = column.collection === true ? this.generateCollectionExpression(column.path, context) : Transpiler.transpile(column.path, context);
 
       // Handle type casting if specified.
       if (column.type && column.collection !== true) {
@@ -76,7 +72,6 @@ export class ColumnExpressionGenerator {
    * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
    * Casting applies only to text-extracted values; expressions already
    * yielding SQL-native values (e.g. `%rowIndex` arithmetic) stand.
-   *
    * @param expression - The SQL expression yielding the raw value.
    * @param column - The ViewDefinition column descriptor carrying the type
    *   and tags.
@@ -110,7 +105,6 @@ export class ColumnExpressionGenerator {
   /**
    * Generate a CASE expression for boolean conversion.
    * Handles both simple JSON_VALUE fields and boolean expressions.
-   *
    * @param expression - The SQL expression yielding 'true'/'false' or a
    *   boolean predicate.
    * @returns A CASE expression yielding 1/0/NULL.
@@ -136,7 +130,6 @@ export class ColumnExpressionGenerator {
 
   /**
    * Generate collection expression that returns an array.
-   *
    * @param path - The FHIRPath of the collection.
    * @param context - The transpiler context.
    * @returns A SQL expression yielding the JSON array text.
@@ -158,7 +151,6 @@ export class ColumnExpressionGenerator {
    * `name.family` and `name.given` aggregate across all `name` elements into
    * one array (reference behaviour); other paths yield the whole collection
    * node via JSON_QUERY.
-   *
    * @param path - The FHIRPath of the collection.
    * @param context - The transpiler context.
    * @returns A SQL expression yielding the JSON array text.
@@ -193,7 +185,6 @@ export class ColumnExpressionGenerator {
    * Build a collection query for the name.family path: an array of every
    * Patient name's family across all name elements. An empty collection yields
    * `[]` (JSON_ARRAYAGG yields NULL over an empty set).
-   *
    * @param context - The transpiler context.
    * @returns The SQL expression.
    */
@@ -210,7 +201,6 @@ export class ColumnExpressionGenerator {
   /**
    * Build a collection query for the name.given path: an array of every given
    * across all name elements (nested JSON_TABLE, wrapped per ORA-40556).
-   *
    * @param context - The transpiler context.
    * @returns The SQL expression.
    */

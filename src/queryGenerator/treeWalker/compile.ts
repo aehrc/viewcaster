@@ -3,23 +3,23 @@
  *
  * Wraps viewDef.select as a synthetic Group node, walks it, and renders
  * the resulting Fragment as a single Oracle SELECT statement.
- *
  * @author John Grimes
  */
 
 import { Transpiler, type TranspilerContext } from "../../fhirpath/transpiler.js";
-import type {
-  ColumnInfo,
-  TranspilationResult,
-  ViewDefinition,
-  ViewDefinitionSelect,
-} from "../../types.js";
 import { ColumnExpressionGenerator } from "../ColumnExpressionGenerator.js";
 import { PathParser } from "../PathParser.js";
 import { WhereClauseBuilder } from "../WhereClauseBuilder.js";
 import { renderRoot } from "./render.js";
 import { type Context, type PartitionKey, SQL_INT } from "./types.js";
 import { makeWalker } from "./walker.js";
+
+import type {
+  ColumnInfo,
+  TranspilationResult,
+  ViewDefinition,
+  ViewDefinitionSelect,
+} from "../../types.js";
 
 const columnGenerator = new ColumnExpressionGenerator();
 const pathParser = new PathParser();
@@ -35,6 +35,8 @@ export interface CompileOptions {
 /**
  * Compiles a ViewDefinition into an Oracle SQL query string and column
  * metadata.
+ * @param viewDef
+ * @param options
  */
 export function compileViewDefinition(
   viewDef: ViewDefinition,
@@ -87,6 +89,7 @@ function buildRootContext(
  * Walk the select tree and collect ColumnInfo metadata in lexical order.
  * Mirrors the behaviour of QueryGenerator.collectAllColumns so the public
  * TranspilationResult.columns shape is unchanged.
+ * @param selects
  */
 function collectColumnMetadata(selects: ViewDefinitionSelect[]): ColumnInfo[] {
   const out: ColumnInfo[] = [];

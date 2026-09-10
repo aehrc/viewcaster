@@ -39,7 +39,6 @@ const RESOURCE_JSON_DATA_TYPES = new Set<ResourceJsonDataType>([
 
 /**
  * Type predicate that narrows a string to a canonical {@link ResourceJsonDataType}.
- *
  * @param value - The value to test.
  * @returns True when the value is a canonical storage type.
  */
@@ -55,7 +54,6 @@ export function validateResourceJsonDataType(
  * Accepts case-insensitive input, trims surrounding whitespace and returns the
  * canonical form. Rejects any value outside the allowlist with a message that
  * names the offending value (SC-004).
- *
  * @param value - The configured storage type (e.g. from the CLI).
  * @returns The canonical storage type.
  * @throws {Error} When the value is empty or not an allowed storage type.
@@ -259,7 +257,6 @@ const ORACLE_RESERVED_WORDS = new Set([
  * - Followed by: letters, digits (0-9), underscore, $ or #
  * - Maximum length: 128 bytes
  * - Must not be a reserved word
- *
  * @param identifier - The identifier to validate
  * @param type - The type of identifier (for error messages)
  * @throws Error if the identifier is invalid
@@ -298,7 +295,6 @@ export function validateOracleIdentifier(
 
 /**
  * Validate a FHIR resource type against the R4 specification.
- *
  * @param resourceType - The resource type to validate
  * @throws Error if the resource type is not valid
  */
@@ -328,7 +324,6 @@ const VALID_ORACLE_TYPES = new Set([
 
 /**
  * Validate an Oracle SQL type specification.
- *
  * @param sqlType - Oracle type string (e.g. 'VARCHAR2(4000)', 'NUMBER(10,2)', 'CLOB').
  * @throws Error if the type is invalid
  */
@@ -344,9 +339,9 @@ export function validateOracleType(sqlType: string): void {
   const baseTypePart =
     openParenIndex === -1
       ? trimmedType
-      : trimmedType.substring(0, openParenIndex).trim();
+      : trimmedType.slice(0, Math.max(0, openParenIndex)).trim();
   const paramsPart =
-    openParenIndex === -1 ? "" : trimmedType.substring(openParenIndex);
+    openParenIndex === -1 ? "" : trimmedType.slice(Math.max(0, openParenIndex));
 
   // Validate base type name: letters and spaces (multi-word base types).
   if (!/^[A-Z][A-Z0-9_ ]*$/i.test(baseTypePart)) {
@@ -417,7 +412,6 @@ const ANSI_TO_ORACLE_TYPE_MAP = new Map<string, string>([
 
 /**
  * Parse an ANSI/ISO SQL type into base type and parameters.
- *
  * @param typeString - The ANSI type string.
  * @returns Object with baseType and parameters.
  */
@@ -429,9 +423,9 @@ function parseAnsiSqlType(typeString: string): {
   const baseTypePart =
     openParenIndex === -1
       ? typeString
-      : typeString.substring(0, openParenIndex).trim();
+      : typeString.slice(0, Math.max(0, openParenIndex)).trim();
   const paramsPart =
-    openParenIndex === -1 ? "" : typeString.substring(openParenIndex);
+    openParenIndex === -1 ? "" : typeString.slice(Math.max(0, openParenIndex));
 
   return {
     baseType: baseTypePart.trim().toUpperCase(),
@@ -447,7 +441,6 @@ function parseAnsiSqlType(typeString: string): {
  * - 'CHARACTER(50)' -> 'CHAR(50)'
  * - 'BOOLEAN' -> 'NUMBER(1)'
  * - 'TIMESTAMP' -> 'TIMESTAMP'
- *
  * @param ansiType - ANSI/ISO SQL type string (e.g. 'INTEGER', 'CHARACTER(20)').
  * @returns Oracle equivalent type.
  * @throws Error if type is invalid or unsupported.

@@ -52,7 +52,6 @@ export interface RenderOptions {
  * a lateral scope mis-correlates on 19c (research R4). Each branch is a
  * self-contained SELECT from the resource table, and the shared WHERE clause
  * (resource type filter and view-level predicates) is applied to every branch.
- *
  * @param fragment - The root Fragment produced by walking the select tree.
  * @param viewDef - The ViewDefinition supplying the resource type, WHERE
  *   predicates, and other metadata needed to construct the WHERE clause.

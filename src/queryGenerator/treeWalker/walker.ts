@@ -5,15 +5,16 @@
  * classifyNode. Operators not yet implemented throw a clear error.
  */
 
-import type { ViewDefinitionSelect } from "../../types.js";
-import type { ColumnExpressionGenerator } from "../ColumnExpressionGenerator.js";
-import type { PathParser } from "../PathParser.js";
 import { classifyNode } from "./classify.js";
 import { walkColumnsOnly } from "./operators/columnsOnly.js";
 import { walkForEach } from "./operators/forEach.js";
 import { walkGroup } from "./operators/group.js";
 import { walkRepeat } from "./operators/repeat.js";
 import { walkUnionAll } from "./operators/unionAll.js";
+
+import type { ViewDefinitionSelect } from "../../types.js";
+import type { ColumnExpressionGenerator } from "../ColumnExpressionGenerator.js";
+import type { PathParser } from "../PathParser.js";
 import type { Context, Fragment } from "./types.js";
 
 export interface WalkerDeps {
@@ -31,7 +32,6 @@ export interface WalkerDeps {
  * (`walkColumnsOnly`, `walkGroup`, `walkForEach`, `walkRepeat`, or
  * `walkUnionAll`). The same `walk` reference is threaded into every operator
  * so they can recurse into child nodes without circular imports.
- *
  * @param deps - External service dependencies shared across all operator
  *   walkers: a `ColumnExpressionGenerator`, a `PathParser`, and the target
  *   schema/table names used by the Repeat CTE builder.
@@ -47,22 +47,27 @@ export function makeWalker(
   function walk(node: ViewDefinitionSelect, ctx: Context): Fragment {
     const kind = classifyNode(node);
     switch (kind) {
-      case "ColumnsOnly":
+      case "ColumnsOnly": {
         return walkColumnsOnly(node, ctx, deps.columnGenerator);
-      case "Group":
+      }
+      case "Group": {
         return walkGroup(node, ctx, walk, deps.columnGenerator);
+      }
       case "ForEach":
-      case "ForEachOrNull":
+      case "ForEachOrNull": {
         return walkForEach(node, ctx, walk, { pathParser: deps.pathParser });
-      case "Repeat":
+      }
+      case "Repeat": {
         return walkRepeat(node, ctx, walk, {
           schemaName: deps.schemaName,
           tableName: deps.tableName,
         });
-      case "UnionAll":
+      }
+      case "UnionAll": {
         return walkUnionAll(node, ctx, walk, {
           columnGenerator: deps.columnGenerator,
         });
+      }
     }
   }
   return walk;

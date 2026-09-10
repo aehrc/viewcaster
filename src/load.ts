@@ -115,7 +115,7 @@ export function buildLoaderOptions(
  * @param directory - Directory to load from.
  * @param commandOptions - Command options.
  */
-// eslint-disable-next-line max-lines-per-function -- CLI action handling.
+ 
 async function handleLoadCommand(
   directory: string,
   commandOptions: Record<string, unknown>,
@@ -137,7 +137,6 @@ async function handleLoadCommand(
 
 /**
  * Create the load command.
- *
  * @returns Commander command for loading NDJSON files.
  */
 export function createLoadCommand(): Command {

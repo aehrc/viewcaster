@@ -24,6 +24,5 @@
     "node_modules",
     "dist",
     // Old mssql-era test modules not yet ported; re-included by Phase 3/5.
-    "src/tests/**"
   ]
 }

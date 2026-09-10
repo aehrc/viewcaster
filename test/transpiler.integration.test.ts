@@ -33,15 +33,11 @@
  * skips cleanly when no ORACLE_* environment is configured.
  */
 
-import { readdirSync, readFileSync, statSync } from "fs";
 import { parse as losslessParse } from "lossless-json";
-import { join } from "path";
-import type oracledb from "oracledb";
+import { readdirSync, readFileSync, statSync } from "node:fs";
+import { join } from "node:path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
-import { SqlOnFhir } from "../src/index";
-import { ViewDefinitionParser } from "../src/parser";
-import type { TestSuite, ViewDefinition } from "../src/types";
-import type { TestReportEntry } from "../src/tests/utils/types";
+
 import {
   createTestTable,
   dropTestTable,
@@ -51,6 +47,12 @@ import {
   TEST_TABLE_NAME,
   type StorageType,
 } from "./testDatabase";
+import { SqlOnFhir } from "../src/index";
+import { ViewDefinitionParser } from "../src/parser";
+
+import type { TestReportEntry } from "./support/testReportTypes";
+import type { TestSuite, ViewDefinition } from "../src/types";
+import type oracledb from "oracledb";
 
 declare global {
   // Set by the harness for the custom Vitest reporter (out/test-report.json).
@@ -59,7 +61,6 @@ declare global {
 
 /**
  * Normalises ORACLE_RESOURCE_JSON_DATA_TYPE to a storage variant.
- *
  * @param value - The env value (case-insensitive).
  * @returns The storage variant.
  */
@@ -107,7 +108,6 @@ async function cleanupTestDatabase(): Promise<void> {
 
 /**
  * Inserts the suite's resources, returning the generated ids for cleanup.
- *
  * @param resources - Resources parsed losslessly upstream.
  * @param testId - Test-isolation identifier stored with the rows.
  * @returns The inserted surrogate ids.
@@ -134,7 +134,6 @@ async function insertSuiteResources(
 
 /**
  * Deletes the rows inserted for a single test case.
- *
  * @param ids - Surrogate ids returned by insertSuiteResources.
  */
 async function deleteTestRows(ids: number[]): Promise<void> {
@@ -154,7 +153,6 @@ interface ExecutionResult {
 
 /**
  * Transpiles a ViewDefinition and executes it on Oracle.
- *
  * @param viewDef - The parsed ViewDefinition.
  * @param testId - The test-isolation identifier used to insert the rows.
  * @returns The rows and the output column names in SQL order.
@@ -181,7 +179,6 @@ async function executeViewDefinition(
 }
 /**
  * Extracts boolean-typed column names from a ViewDefinition.
- *
  * @param viewDefinition - The parsed ViewDefinition.
  * @returns The boolean column names.
  */
@@ -216,7 +213,6 @@ function extractBooleanColumns(viewDefinition: ViewDefinition): Set<string> {
 /**
  * Parses JSON-looking strings in query results into arrays/objects and
  * converts numeric boolean columns (1/0) to booleans.
- *
  * @param results - Raw rows.
  * @param booleanColumns - Names of boolean-typed columns.
  * @returns Parsed rows.
@@ -246,7 +242,6 @@ function parseJsonStringsInResults(
 
 /**
  * Checks whether a string looks like JSON.
- *
  * @param value - The string to inspect.
  * @returns True when the trimmed string starts with `[` or `{`.
  */
@@ -259,7 +254,6 @@ function looksLikeJson(value: string): boolean {
  * Deep equality with FHIR type handling and the documented '' ≡ NULL
  * equivalence (research R8): Oracle cannot distinguish the empty string from
  * SQL NULL, so the comparison treats them as equivalent.
- *
  * @param a - Actual value.
  * @param b - Expected value.
  * @returns True when equivalent.
@@ -277,7 +271,6 @@ function deepEqual(a: unknown, b: unknown): boolean {
 /**
  * Checks whether both values are null/undefined/empty-string equivalent
  * (research R8).
- *
  * @param a - First value.
  * @param b - Second value.
  * @returns True when indistinguishable on Oracle.
@@ -289,7 +282,6 @@ function bothNullOrUndefined(a: unknown, b: unknown): boolean {
 
 /**
  * Checks whether either value is null/undefined (but not both).
- *
  * @param a - First value.
  * @param b - Second value.
  * @returns True when exactly one is absent.
@@ -301,7 +293,6 @@ function eitherNullOrUndefined(a: unknown, b: unknown): boolean {
 
 /**
  * Checks whether a value is a number or a numeric string.
- *
  * @param value - The value to inspect.
  * @returns True when numeric.
  */
@@ -316,7 +307,6 @@ function isNumeric(value: unknown): boolean {
 
 /**
  * Handles boolean/number conversions between expected and actual values.
- *
  * @param a - First value.
  * @param b - Second value.
  * @returns True when one is a boolean and the other its 1/0 form.
@@ -329,7 +319,6 @@ function handleBooleanNumberConversion(a: unknown, b: unknown): boolean {
 
 /**
  * Compares two object values (arrays or plain objects).
- *
  * @param a - First value.
  * @param b - Second value.
  * @returns True when equal.
@@ -351,7 +340,6 @@ function compareObjects(a: unknown, b: unknown): boolean {
 /**
  * Compares actual rows with expected rows, ignoring row order but honouring
  * column order when the test declares expectedColumns.
- *
  * @param actualResults - The executed rows.
  * @param expectedResults - The suite's expected rows.
  * @param expectedColumns - Optional expected column ordering.
@@ -390,7 +378,6 @@ function compareResults(
 
 /**
  * Checks whether two arrays are element-wise equal.
- *
  * @param a - First array.
  * @param b - Second array.
  * @returns True when equal.
@@ -402,7 +389,6 @@ function arraysEqual<T>(a: T[], b: T[]): boolean {
 /**
  * Loads one suite file, re-parsing its resources losslessly so decimal
  * lexemes (e.g. 1.0) survive insertion.
- *
  * @param filePath - The suite JSON file path.
  * @returns The parsed suite with lossless resources.
  */
@@ -418,7 +404,6 @@ function loadSuiteFile(filePath: string): TestSuite {
 
 /**
  * Resolves every JSON suite file under the test path (file or directory).
- *
  * @param testPath - The SQLONFHIR_TEST_PATH value.
  * @returns Suite file paths sorted by name.
  */
@@ -463,13 +448,13 @@ describe.skipIf(!hasOracleEnvironment())(
               result: { passed: true },
             };
             let insertedIds: number[] = [];
-            const testId = `t_${testCase.title.replace(/[^A-Za-z0-9_-]/g, "_").slice(0, 100)}_${Math.random().toString(36).slice(2, 10)}`;
+            const testId = `t_${testCase.title.replaceAll(/[^A-Za-z0-9_-]/g, "_").slice(0, 100)}_${Math.random().toString(36).slice(2, 10)}`;
             try {
               insertedIds = await insertSuiteResources(suite.resources, testId);
               if (testCase.expectError) {
                 try {
                   await executeViewDefinition(
-                    testCase.view as ViewDefinition,
+                    testCase.view,
                     testId,
                   );
                   entry.result = {
@@ -484,12 +469,12 @@ describe.skipIf(!hasOracleEnvironment())(
                 return;
               }
               const result = await executeViewDefinition(
-                testCase.view as ViewDefinition,
+                testCase.view,
                 testId,
               );
               const passed = compareResults(
                 result.results,
-                (testCase.expect ?? []) as Record<string, unknown>[],
+                (testCase.expect ?? []),
                 testCase.expectColumns,
                 result.columns,
               );

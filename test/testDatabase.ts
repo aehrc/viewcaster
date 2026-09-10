@@ -223,6 +223,7 @@ export async function insertTestResources(
  * `DB_TYPE_JSON`.
  * @param connection - An open connection.
  * @param resource - The FHIR resource; must carry `resourceType`.
+ * @param resource.resourceType
  * @param testId - Test-isolation identifier stored with the row.
  * @param storageType - JSON column storage variant of the target table.
  * @param tableName - Table name; defaults to {@link TEST_TABLE_NAME}.

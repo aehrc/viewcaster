@@ -6,11 +6,13 @@
  * projections in lexical order.
  */
 
+import { mergeSiblings } from "../mergeSiblings.js";
+import {  walkColumnsOnly } from "./columnsOnly.js";
+
 import type { ViewDefinitionSelect } from "../../../types.js";
 import type { ColumnExpressionGenerator } from "../../ColumnExpressionGenerator.js";
-import { mergeSiblings } from "../mergeSiblings.js";
 import type { Context, Fragment } from "../types.js";
-import { projectColumns, walkColumnsOnly } from "./columnsOnly.js";
+
 
 /**
  * Walker for Group nodes — visits each child select and merges their Fragments.
@@ -22,7 +24,6 @@ import { projectColumns, walkColumnsOnly } from "./columnsOnly.js";
  *
  * Returns an empty Fragment when the node has neither `column[]` nor
  * `select[]` children.
- *
  * @param node - The Group select node, which may carry `column[]`, `select[]`,
  *   or both.
  * @param ctx - The current walker context passed unchanged to every child.
@@ -64,4 +65,6 @@ export function walkGroup(
 }
 
 // Re-export so other operators can call into ColumnsOnly through Group.
-export { projectColumns };
+
+
+export {projectColumns} from "./columnsOnly.js";

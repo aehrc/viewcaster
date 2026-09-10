@@ -24,6 +24,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+
 import { SqlOnFhir } from "./index";
 import { ViewDefinitionParser } from "./parser";
 

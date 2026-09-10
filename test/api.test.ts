@@ -23,21 +23,19 @@
  * SqlOnFhirOptions reflected in generated SQL, and the error contract.
  */
 
-import { mkdtempSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdtempSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import { beforeAll, describe, expect, it } from "vitest";
+
 import {
   SqlOnFhir,
   Transpiler,
   ViewDefinitionParser,
   loadNdjsonFiles,
 } from "../src/index";
-import type {
-  ColumnInfo,
-  QueryGeneratorOptions,
-  ViewDefinition,
-} from "../src/index";
+
+import type { QueryGeneratorOptions } from "../src/index";
 
 describe("public API export surface", () => {
   it("exports SqlOnFhir as a constructible class", () => {
@@ -112,7 +110,7 @@ describe("TranspileResult shape", () => {
         },
       ],
     });
-    const columns = result.columns as ColumnInfo[];
+    const columns = result.columns;
     expect(columns.map((c) => c.name)).toEqual(["id", "active", "n"]);
     expect(columns[0].type).toBe("VARCHAR2(64)");
     expect(columns[1].type).toBe("NUMBER(1)");
@@ -198,6 +196,6 @@ describe("parser round trip via public API", () => {
       status: "active",
       select: [{ column: [{ name: "id", path: "id" }] }],
     });
-    expect((viewDef as ViewDefinition).resource).toBe("Patient");
+    expect((viewDef).resource).toBe("Patient");
   });
 });

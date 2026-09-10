@@ -24,11 +24,11 @@
  */
 
 import { describe, expect, it } from "vitest";
+
 import { SqlOnFhir } from "../index";
 
 /**
  * Transpile a single-column Patient view with the given column definition.
- *
  * @param column - The ViewDefinition column object.
  * @param options - Optional SqlOnFhir options (storage type et al).
  * @returns The generated SQL.

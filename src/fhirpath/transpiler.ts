@@ -28,14 +28,16 @@
  */
 
 import { CharStreams, CommonTokenStream } from "antlr4ts";
+
 import { fhirpathLexer } from "../generated/grammar/fhirpathLexer";
 import {
   EntireExpressionContext,
   fhirpathParser,
 } from "../generated/grammar/fhirpathParser";
-import type { ViewDefinitionColumnTag } from "../types.js";
 import { validateAnsiSqlType, validateOracleType } from "../validation.js";
 import { FHIRPathToOracleVisitor, type TranspilerContext } from "./visitor";
+
+import type { ViewDefinitionColumnTag } from "../types.js";
 
 // Re-export TranspilerContext type from visitor
 export type { TranspilerContext } from "./visitor";
@@ -43,7 +45,6 @@ export type { TranspilerContext } from "./visitor";
 export class Transpiler {
   /**
    * Transpile a FHIRPath expression to Oracle SQL.
-   *
    * @param expression - The FHIRPath expression.
    * @param context - The transpiler context (aliases, constants, storage).
    * @returns The Oracle SQL expression.
@@ -111,7 +112,6 @@ export class Transpiler {
    * call as the source (e.g. JSON_VALUE(JSON_QUERY(...))) are left alone: the
    * inner function already yields JSON-typed text and the default return type
    * applies. Idempotent on already-Oracle-shaped input.
-   *
    * @param expr - The dialect-neutral SQL fragment.
    * @param storage - The targeted JSON storage type.
    * @returns The Oracle-shaped SQL fragment.
@@ -121,17 +121,17 @@ export class Transpiler {
     storage: "BLOB" | "JSON",
   ): string {
     const formatSuffix = storage === "BLOB" ? " FORMAT JSON" : "";
-    const decorated = expr.replace(
+    const decorated = expr.replaceAll(
       /JSON_VALUE\(([^(),]+),\s*'([^']+)'\)/g,
       (_match, source: string, path: string) =>
         `JSON_VALUE(${source}${formatSuffix}, '${path}' RETURNING VARCHAR2(4000))`,
     );
-    const withJsonQuery = decorated.replace(
+    const withJsonQuery = decorated.replaceAll(
       /JSON_QUERY\(([^(),]+),\s*'([^']+)'\)/g,
       (_match, source: string, path: string) =>
         `JSON_QUERY(${source}${formatSuffix}, '${path}')`,
     );
-    return withJsonQuery.replace(
+    return withJsonQuery.replaceAll(
       /JSON_EXISTS\(([^(),]+),\s*'([^']+)'\)/g,
       (_match, source: string, path: string) =>
         `JSON_EXISTS(${source}${formatSuffix}, '${path}')`,
@@ -142,7 +142,6 @@ export class Transpiler {
    * Get the SQL data type for a FHIR type, with optional tag-based override.
    *
    * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
-   *
    * @param fhirType - FHIR primitive type name (e.g. 'string', 'integer').
    * @param tags - Optional array of column tags for type hints.
    * @returns Oracle SQL type specification.
@@ -163,6 +162,7 @@ export class Transpiler {
 
   /**
    * Get type override from oracle/type or ansi/type tag if present.
+   * @param tags
    */
   private static getTagTypeOverride(
     tags?: ViewDefinitionColumnTag[],
@@ -192,6 +192,7 @@ export class Transpiler {
    * (research R9). Text is the default so FHIR semantics (partial dates,
    * arbitrary-precision decimals, Unicode) are preserved; native types are an
    * explicit opt-in via type tags.
+   * @param fhirType
    */
   private static getDefaultFhirTypeMapping(fhirType?: string): string {
     const typeMap: Record<string, string> = {

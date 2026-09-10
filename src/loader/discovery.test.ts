@@ -95,7 +95,7 @@ describe("discoverFiles", () => {
     expect(files.map((file) => file.resourceType)).toEqual(["Patient"]);
     const skippedNames = skipped
       .map((entry) => entry.file)
-      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
+      .sort((a, b) => (a < b ? -1 : (a > b ? 1 : 0)));
     expect(skippedNames).toEqual([
       "Patient.ndjson.bak",
       "README.md",

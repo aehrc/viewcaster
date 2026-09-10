@@ -12,14 +12,12 @@
  * recursive CTE cannot be referenced more than once per query block on 19c,
  * so the enclosing CTE is referenced exactly once - inside the spine anchor -
  * and its context columns are carried through the recursion.
- *
  * @author John Grimes
  */
 
-import type { ViewDefinitionSelect } from "../../../types.js";
 import { freshAlias } from "../aliasGenerator.js";
-import { applyTextReplacements } from "../mergeSiblings.js";
 import { buildRepeatCte, qualifiedKeyCols } from "../cteTemplates.js";
+import { applyTextReplacements } from "../mergeSiblings.js";
 import {
   type CarriedColumn,
   type Context,
@@ -29,7 +27,9 @@ import {
   type RebaseInfo,
   type SpineContext,
 } from "../types.js";
+
 import type { TranspilerContext } from "../../../fhirpath/transpiler.js";
+import type { ViewDefinitionSelect } from "../../../types.js";
 
 export interface RepeatDeps {
   schemaName: string;
@@ -57,7 +57,6 @@ export interface RepeatDeps {
  * a single SELECT over the CTE via a row-duplicating CROSS APPLY and CASE
  * expressions, because a top-level UNION ALL over the same lateral recursive
  * CTE raises ORA-32036 on 19c.
- *
  * @param node - The Repeat select node; `node.repeat` supplies the ordered
  *   list of FHIRPath strings used as the anchor and recursive paths.
  * @param ctx - The current walker context; the inner context is derived from
@@ -190,7 +189,6 @@ export function walkRepeat(
  * raise ORA-32036 on 19c (research R4). Branches with their own APPLY chains
  * fall back to the top-level UNION ALL emission (not exercised by the suite;
  * such a query cannot reference the recursive CTE twice on 19c anyway).
- *
  * @param inner - The union Fragment returned by the inner walk.
  * @param cte - This repeat's recursive CTE definition.
  * @param innerCtx - The repeat's inner context (post-recursion scope).
@@ -266,7 +264,6 @@ function mergeRepeatUnion(
  *
  * Union branches fold a shared row-CTE list into every branch; hoisting them
  * into one WITH section must not emit the same alias twice.
- *
  * @param ctes - CTE definitions possibly containing duplicates.
  * @returns Definitions keyed by unique alias, in first-seen order.
  */
@@ -365,6 +362,8 @@ function buildRepeatInnerCtx(
  * fragments in the enclosing scope are re-pointed from the outer repeat CTE
  * (and trace aliases) onto the spine CTE's carried columns, and their JOIN
  * clauses referencing those aliases are dropped.
+ * @param ctx
+ * @param cteAlias
  */
 function buildRebaseInfo(ctx: Context, cteAlias: string): RebaseInfo {
   const spine = ctx.spine;
@@ -377,8 +376,7 @@ function buildRebaseInfo(ctx: Context, cteAlias: string): RebaseInfo {
     // The original defining-scope expression (e.g. "r.id", "forEach_1.idx")
     // and the base CTE-qualified form (e.g. "repeat_0.id") both occur in
     // sibling SQL; the spine CTE projects every key under its name.
-    replacements.push({ from: k.sqlExpr, to: `${cteAlias}.${k.name}` });
-    replacements.push({
+    replacements.push({ from: k.sqlExpr, to: `${cteAlias}.${k.name}` }, {
       from: `${base}.${k.name}`,
       to: `${cteAlias}.${k.name}`,
     });
@@ -386,16 +384,13 @@ function buildRebaseInfo(ctx: Context, cteAlias: string): RebaseInfo {
   replacements.push({
     from: `${base}.elem_path`,
     to: `${cteAlias}.${base}_path`,
-  });
-  replacements.push({
+  }, {
     from: `${base}.elem_order`,
     to: `${cteAlias}.${base}_elem_order`,
-  });
-  replacements.push({
+  }, {
     from: `${base}.item_json`,
     to: `${cteAlias}.${base}_item_json`,
-  });
-  replacements.push({
+  }, {
     from: `${base}.item_scalar`,
     to: `${cteAlias}.${base}_item_scalar`,
   });
@@ -403,8 +398,7 @@ function buildRebaseInfo(ctx: Context, cteAlias: string): RebaseInfo {
     // The original ancestor-level form (composition target: an outer spine's
     // own rebase points at this base-qualified form) and the base CTE's own
     // qualified reference both occur in sibling SQL.
-    replacements.push({ from: c.origin, to: `${cteAlias}.${c.name}` });
-    replacements.push({
+    replacements.push({ from: c.origin, to: `${cteAlias}.${c.name}` }, {
       from: `${base}.${c.name}`,
       to: `${cteAlias}.${c.name}`,
     });

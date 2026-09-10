@@ -135,7 +135,6 @@ async function countNdjsonLines(file: DiscoveredFile): Promise<number> {
 
 /**
  * Prepare database table for loading.
- *
  * @param pool - Database connection pool.
  * @param options - Loader options.
  * @param jsonType - Requested storage type.
@@ -198,7 +197,6 @@ async function prepareTable(
 
 /**
  * Load files in parallel chunks.
- *
  * @param pool - Database connection pool.
  * @param files - Files to load.
  * @param options - Loader options.

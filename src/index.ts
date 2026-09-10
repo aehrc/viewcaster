@@ -2,7 +2,6 @@
  * SQL on FHIR runner for Oracle Database.
  * Main API for transpiling ViewDefinitions to Oracle SQL queries and bulk
  * loading FHIR NDJSON resources.
- *
  * @author John Grimes
  */
 
@@ -30,6 +29,7 @@ export type {
 
 import { ViewDefinitionParser } from "./parser.js";
 import { QueryGenerator, QueryGeneratorOptions } from "./queryGenerator";
+
 import type { TranspilationResult, ViewDefinition } from "./types.js";
 
 /**
@@ -45,7 +45,6 @@ export class SqlOnFhir {
 
   /**
    * Create a transpiler with the given source-table configuration.
-   *
    * @param options - Table/schema/column names and the JSON storage type the
    *   generated SQL targets.
    */
@@ -55,7 +54,6 @@ export class SqlOnFhir {
 
   /**
    * Transpile a ViewDefinition to an Oracle SQL query.
-   *
    * @param viewDefinition - The ViewDefinition to transpile: a parsed object,
    *   a JSON string, or a FHIR resource with `resourceType:
    *   "ViewDefinition"`. Invalid input throws naming the offending element

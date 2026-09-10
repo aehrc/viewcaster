@@ -36,7 +36,6 @@ import type { Context, Fragment, RebaseInfo } from "./types.js";
  * Shared by sibling rewrites and rebase composition: each `from` pattern is
  * matched with identifier-boundary lookarounds so that e.g. "r.id" never
  * matches inside a longer identifier.
- *
  * @param sql - The SQL text to rewrite.
  * @param replacements - Ordered from/to pairs.
  * @returns The rewritten SQL.
@@ -47,8 +46,8 @@ export function applyTextReplacements(
 ): string {
   let out = sql;
   for (const { from, to } of replacements) {
-    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
-    out = out.replace(
+    const escaped = from.replaceAll(/[.*+?^${}()|[\]\\]/g, String.raw`\$&`);
+    out = out.replaceAll(
       new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`, "g"),
       () => to,
     );
@@ -69,7 +68,6 @@ export function applyTextReplacements(
  * on the enclosing repeat), the other siblings are rewritten onto the spine
  * CTE and the rebase is carried on the merged result so the enclosing repeat
  * walker can drop its own join.
- *
  * @param fragments - Ordered array of sibling Fragments to merge.
  * @param ctx - The context of the parent Group node, used to supply
  *   `partitionKeys` for the merged result.
@@ -97,7 +95,7 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
   const rebase = rebasers[0]?.rebase;
   const effective = rebase
     ? fragments.map((f) =>
-        f.rebase !== undefined ? f : rebaseSiblingFragment(f, rebase),
+        f.rebase === undefined ? rebaseSiblingFragment(f, rebase) : f,
       )
     : fragments;
 
@@ -158,7 +156,6 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
  * that reference an out-of-scope ancestor alias are dropped, because the
  * ancestor rows now surface only through the spine CTE that the rebasing
  * sibling joins.
- *
  * @param fragment - The sibling fragment to rewrite.
  * @param rebase - The rebase info of the sibling that anchored the spine.
  * @returns The rewritten fragment.
@@ -174,7 +171,7 @@ function rebaseSiblingFragment(
         (clause) =>
           clause === "" ||
           !rebase.ancestorAliases.some((alias) =>
-            new RegExp(`\\b${alias}\\.`).test(clause),
+            new RegExp(String.raw`\b${alias}\.`).test(clause),
           ),
       )
       .join("\n");

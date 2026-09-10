@@ -28,6 +28,7 @@
  */
 
 import { jsonTableColumns } from "../../fhirpath/visitor.js";
+
 import type { CarriedColumn, CteDefinition, PartitionKey } from "./types.js";
 
 export interface BuildRepeatCteArgs {
@@ -67,7 +68,6 @@ export interface BuildRepeatCteArgs {
  * the element index to the `elem_path` accumulator for stable per-element
  * identity. Multi-segment paths (e.g. `"a.b.c"`) produce a chain of nested
  * `CROSS APPLY JSON_TABLE` calls.
- *
  * @param args - Parameters controlling CTE generation.
  * @returns A `CteDefinition` with `alias` set to `args.cteAlias` and `body`
  *   containing the full anchor + recursive SQL (without the outer
@@ -173,7 +173,6 @@ const ORDER_SEGMENT_WIDTH = 10;
  * zero-padded to a fixed width so that lexical ordering of the `.`-joined
  * order string is equivalent to numeric depth-first (pre-order) traversal.
  * This is what `%rowIndex` orders by inside a `repeat`.
- *
  * @param alias - The JSON_TABLE alias providing the `idx` column.
  * @returns An SQL expression yielding the zero-padded order segment.
  */
@@ -186,7 +185,6 @@ function orderSegment(alias: string): string {
  * qualified by `alias` (e.g. `cte.id, cte.fe_0_idx`). Shared by the
  * recursive-member projection and the repeat `%rowIndex` window's PARTITION
  * BY.
- *
  * @param alias - The alias qualifying the keys.
  * @param keys - The partition keys.
  * @returns The qualified column list.
@@ -200,7 +198,6 @@ export function qualifiedKeyCols(alias: string, keys: PartitionKey[]): string {
  * path. For "a.b.c" produces three chained APPLYs; intermediate levels consume
  * the previous level's `value` column wrapped in JSON_QUERY (ORA-40556); the
  * last alias is `finalAlias`.
- *
  * @param source - The JSON source expression for the first level.
  * @param path - The dotted path below the source.
  * @param finalAlias - The alias of the last level.

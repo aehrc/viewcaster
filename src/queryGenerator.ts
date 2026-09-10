@@ -4,17 +4,17 @@
  * Public façade over the tree-walker query compiler. Builds the base
  * transpiler context (resource alias, constants, optional test id) and
  * delegates SQL generation to `compileViewDefinition`.
- *
  * @author John Grimes
  */
 
-import type { TranspilerContext } from "./fhirpath/transpiler.js";
 import { compileViewDefinition } from "./queryGenerator/treeWalker/index.js";
 import {
   TranspilationResult,
   ViewDefinition,
   ViewDefinitionConstant,
 } from "./types.js";
+
+import type { TranspilerContext } from "./fhirpath/transpiler.js";
 
 export interface QueryGeneratorOptions {
   tableName?: string;
@@ -32,7 +32,6 @@ export class QueryGenerator {
 
   /**
    * Create a query generator with the given source-table configuration.
-   *
    * @param options - Table/schema/column names and the JSON storage type the
    *   generated SQL targets.
    */
@@ -49,7 +48,6 @@ export class QueryGenerator {
 
   /**
    * Generate an Oracle SQL query from a ViewDefinition.
-   *
    * @param viewDef - The parsed ViewDefinition.
    * @param testId - Optional test-isolation identifier (unused on Oracle).
    * @returns The SQL and column metadata.
@@ -71,7 +69,6 @@ export class QueryGenerator {
 
   /**
    * Create the base transpiler context with resource alias and constants.
-   *
    * @param viewDef - The ViewDefinition supplying constants.
    * @param testId - Optional test-isolation identifier.
    * @returns The base transpiler context threaded through the whole compile.
@@ -100,7 +97,6 @@ export class QueryGenerator {
   /**
    * Extract the value from a ViewDefinitionConstant. Throws if zero or more
    * than one `value[x]` element is set.
-   *
    * @param constant - The constant definition.
    * @returns The constant's value.
    * @throws Naming the constant when it has no value or multiple values.

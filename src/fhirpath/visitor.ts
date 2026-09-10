@@ -9,11 +9,11 @@
  * matching never sees them. JSON_TABLE templates are emitted fully formed
  * (they need multi-clause column lists the terminal pass cannot reconstruct)
  * using the storage type from the context.
- *
  * @author John Grimes
  */
 
 import { AbstractParseTreeVisitor } from "antlr4ts/tree/AbstractParseTreeVisitor";
+
 import {
   AdditiveExpressionContext,
   AndExpressionContext,
@@ -62,7 +62,6 @@ import { fhirpathVisitor } from "../generated/grammar/fhirpathVisitor";
  * JSON_TABLE column list for iterating an array. `value` carries the whole
  * element (CLOB, marked FORMAT JSON in BLOB mode so downstream JSON functions
  * accept it); `scalar` carries it as text.
- *
  * @param storage - The targeted JSON storage type.
  * @returns The COLUMNS clause text.
  */
@@ -73,7 +72,6 @@ export function jsonTableColumns(storage: "BLOB" | "JSON"): string {
 
 /**
  * The `FORMAT JSON` suffix to apply to a JSON source expression.
- *
  * @param storage - The targeted JSON storage type.
  * @returns ` FORMAT JSON` in BLOB mode, empty string in native JSON mode.
  */
@@ -111,6 +109,10 @@ export class FHIRPathToOracleVisitor
   extends AbstractParseTreeVisitor<string>
   implements fhirpathVisitor<string>
 {
+  /**
+   *
+   * @param context
+   */
   constructor(private readonly context: TranspilerContext) {
     super();
   }
@@ -140,14 +142,26 @@ export class FHIRPathToOracleVisitor
     return "NULL";
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitEntireExpression(ctx: EntireExpressionContext): string {
     return this.visit(ctx.expression());
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitTermExpression(ctx: TermExpressionContext): string {
     return this.visit(ctx.term());
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitInvocationExpression(ctx: InvocationExpressionContext): string {
     const base = this.visit(ctx.expression());
     const invocation = ctx.invocation();
@@ -163,6 +177,10 @@ export class FHIRPathToOracleVisitor
     return this.defaultResult();
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitIndexerExpression(ctx: IndexerExpressionContext): string {
     const base = this.visit(ctx.expression(0));
     const index = this.visit(ctx.expression(1));
@@ -180,17 +198,21 @@ export class FHIRPathToOracleVisitor
     return `JSON_VALUE(${base}, '$[${index}]')`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitPolarityExpression(ctx: PolarityExpressionContext): string {
     const operand = this.visit(ctx.expression());
     const operator = ctx.text.charAt(0); // '+' or '-'
 
-    if (operator === "-") {
-      return `(-${operand})`;
-    } else {
-      return `(+${operand})`;
-    }
+    return operator === "-" ? `(-${operand})` : `(+${operand})`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -205,18 +227,26 @@ export class FHIRPathToOracleVisitor
     const rightCasted = this.castForNumericOperation(right);
 
     switch (operator) {
-      case "*":
+      case "*": {
         return `(${leftCasted} * ${rightCasted})`;
+      }
       case "/":
-      case "div":
+      case "div": {
         return `(${leftCasted} / ${rightCasted})`;
-      case "mod":
+      }
+      case "mod": {
         return `MOD(${leftCasted}, ${rightCasted})`;
-      default:
+      }
+      default: {
         return `(${leftCasted} * ${rightCasted})`;
+      }
     }
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitAdditiveExpression(ctx: AdditiveExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -236,9 +266,10 @@ export class FHIRPathToOracleVisitor
           ? `(${leftCasted} + ${rightCasted})`
           : `(${leftCasted} - ${rightCasted})`;
       }
-      case "&":
+      case "&": {
         // String concatenation in FHIRPath; Oracle uses `||`.
         return `(${left} || ${right})`;
+      }
       default: {
         const leftCasted = this.castForNumericOperation(left);
         const rightCasted = this.castForNumericOperation(right);
@@ -247,6 +278,10 @@ export class FHIRPathToOracleVisitor
     }
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitTypeExpression(ctx: TypeExpressionContext): string {
     const expression = this.visit(ctx.expression());
     const typeSpec = this.visit(ctx.typeSpecifier());
@@ -267,6 +302,10 @@ export class FHIRPathToOracleVisitor
     return expression;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitUnionExpression(ctx: UnionExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -277,6 +316,10 @@ export class FHIRPathToOracleVisitor
     return `COALESCE(${left}, ${right})`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitInequalityExpression(ctx: InequalityExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -286,41 +329,59 @@ export class FHIRPathToOracleVisitor
     const operator = ctx.childCount >= 3 ? ctx.getChild(1).text : "";
 
     switch (operator) {
-      case "<":
+      case "<": {
         return `(${left} < ${right})`;
-      case "<=":
+      }
+      case "<=": {
         return `(${left} <= ${right})`;
-      case ">":
+      }
+      case ">": {
         return `(${left} > ${right})`;
-      case ">=":
+      }
+      case ">=": {
         return `(${left} >= ${right})`;
-      default:
+      }
+      default: {
         return `(${left} < ${right})`;
+      }
     }
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitEqualityExpression(ctx: EqualityExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
     const operator = this.getOperatorFromContext(ctx.text, left, right);
 
     switch (operator) {
-      case "=":
+      case "=": {
         // Handle boolean comparisons - boolean literals return quoted strings
         return `(${left} = ${right})`;
-      case "!=":
+      }
+      case "!=": {
         return `(${left} != ${right})`;
-      case "~":
+      }
+      case "~": {
         // Equivalent/approximately equal
         return `(${left} = ${right})`;
-      case "!~":
+      }
+      case "!~": {
         // Not equivalent
         return `(${left} != ${right})`;
-      default:
+      }
+      default: {
         return `(${left} = ${right})`;
+      }
     }
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitMembershipExpression(ctx: MembershipExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -340,7 +401,6 @@ export class FHIRPathToOracleVisitor
   /**
    * Builds an EXISTS predicate checking that `needle` occurs among the
    * elements of the collection expression `collection`.
-   *
    * @param collection - SQL fragment yielding the collection.
    * @param needle - SQL fragment yielding the scalar to find.
    * @returns An EXISTS(...) predicate.
@@ -350,12 +410,20 @@ export class FHIRPathToOracleVisitor
     return `EXISTS (SELECT 1 FROM JSON_TABLE(${collection}${fmt}, '$[*]' COLUMNS (value VARCHAR2(4000) PATH '$')) WHERE value = ${needle})`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitAndExpression(ctx: AndExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
     return `(${left} AND ${right})`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitOrExpression(ctx: OrExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -371,6 +439,10 @@ export class FHIRPathToOracleVisitor
     return `(${left} OR ${right})`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitImpliesExpression(ctx: ImpliesExpressionContext): string {
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
@@ -379,53 +451,93 @@ export class FHIRPathToOracleVisitor
   }
 
   // Literal visitors
+  /**
+   *
+   * @param _ctx
+   */
   visitNullLiteral(_ctx: NullLiteralContext): string {
     return "NULL";
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitBooleanLiteral(ctx: BooleanLiteralContext): string {
     const value = ctx.text.toLowerCase();
     // Return quoted boolean for JSON comparisons
     return value === "true" ? "'true'" : "'false'";
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitStringLiteral(ctx: StringLiteralContext): string {
     // Remove surrounding quotes and escape internal quotes
-    const value = ctx.text.slice(1, -1).replace(/'/g, "''");
+    const value = ctx.text.slice(1, -1).replaceAll('\'', "''");
     return `'${value}'`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitNumberLiteral(ctx: NumberLiteralContext): string {
     return ctx.text;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitLongNumberLiteral(ctx: LongNumberLiteralContext): string {
     return ctx.text.replace(/L$/i, "");
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitDateLiteral(ctx: DateLiteralContext): string {
     // Remove @ prefix and wrap in quotes for SQL
-    const value = ctx.text.substring(1);
+    const value = ctx.text.slice(1);
     return `'${value}'`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitDateTimeLiteral(ctx: DateTimeLiteralContext): string {
     // Remove @ prefix and wrap in quotes for SQL
-    const value = ctx.text.substring(1);
+    const value = ctx.text.slice(1);
     return `'${value}'`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitTimeLiteral(ctx: TimeLiteralContext): string {
     // Remove @T prefix and wrap in quotes for SQL
-    const value = ctx.text.substring(2);
+    const value = ctx.text.slice(2);
     return `'${value}'`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitQuantityLiteral(ctx: QuantityLiteralContext): string {
     return this.visit(ctx.quantity());
   }
 
   // Invocation visitors
+  /**
+   *
+   * @param ctx
+   */
   visitMemberInvocation(ctx: MemberInvocationContext): string {
     const memberName = this.visit(ctx.identifier());
 
@@ -436,7 +548,7 @@ export class FHIRPathToOracleVisitor
     }
 
     // Known FHIR array fields should use JSON_QUERY
-    const knownArrayFields = [
+    const knownArrayFields = new Set([
       "name",
       "given",
       "telecom",
@@ -450,29 +562,37 @@ export class FHIRPathToOracleVisitor
       "udiCarrier",
       "coding",
       "component",
-    ];
+    ]);
 
     // Regular JSON property access
     if (this.context.iterationContext) {
       // Check if the member is a known array field - use JSON_QUERY for arrays
-      if (knownArrayFields.includes(memberName)) {
+      if (knownArrayFields.has(memberName)) {
         return `JSON_QUERY(${this.context.iterationContext}, '$.${memberName}')`;
       }
       return `JSON_VALUE(${this.context.iterationContext}, '$.${memberName}')`;
     }
 
     // Use JSON_QUERY for known array fields, JSON_VALUE for others
-    if (knownArrayFields.includes(memberName)) {
+    if (knownArrayFields.has(memberName)) {
       return `JSON_QUERY(${this.rootJson}, '$.${memberName}')`;
     }
 
     return `JSON_VALUE(${this.rootJson}, '$.${memberName}')`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitFunctionInvocation(ctx: FunctionInvocationContext): string {
     return this.visit(ctx.function());
   }
 
+  /**
+   *
+   * @param _ctx
+   */
   visitThisInvocation(_ctx: ThisInvocationContext): string {
     // $this refers to the current item in an iteration context. A JSON_TABLE
     // iteration exposes both the element's JSON text (`value`, for navigation)
@@ -490,7 +610,6 @@ export class FHIRPathToOracleVisitor
    * Maps an iteration source to its scalar (unquoted text) column variant:
    * `value` to `scalar`, `alias.value` to `alias.scalar`, and
    * `cte.item_json` to `cte.item_scalar`.
-   *
    * @param source - The iteration source expression.
    * @returns The scalar column reference, or null when not applicable.
    */
@@ -509,6 +628,10 @@ export class FHIRPathToOracleVisitor
     return null;
   }
 
+  /**
+   *
+   * @param _ctx
+   */
   visitIndexInvocation(_ctx: IndexInvocationContext): string {
     // $index in forEach contexts - return current iteration index (0-based)
     if (this.context.currentForEachAlias) {
@@ -520,6 +643,10 @@ export class FHIRPathToOracleVisitor
     return "0";
   }
 
+  /**
+   *
+   * @param _ctx
+   */
   visitTotalInvocation(_ctx: TotalInvocationContext): string {
     // $total in forEach contexts - return total count of items in current iteration
     if (
@@ -539,23 +666,43 @@ export class FHIRPathToOracleVisitor
   }
 
   // Term visitors
+  /**
+   *
+   * @param ctx
+   */
   visitInvocationTerm(ctx: InvocationTermContext): string {
     return this.visit(ctx.invocation());
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitLiteralTerm(ctx: LiteralTermContext): string {
     return this.visit(ctx.literal());
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitExternalConstantTerm(ctx: ExternalConstantTermContext): string {
     return this.visit(ctx.externalConstant());
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitParenthesizedTerm(ctx: ParenthesizedTermContext): string {
     const expr = this.visit(ctx.expression());
     return `(${expr})`;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitExternalConstant(ctx: ExternalConstantContext): string {
     let constantName: string;
 
@@ -591,6 +738,10 @@ export class FHIRPathToOracleVisitor
     );
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitFunction(ctx: FunctionContext): string {
     const functionName = this.visit(ctx.identifier());
     const paramList = ctx.paramList();
@@ -615,11 +766,19 @@ export class FHIRPathToOracleVisitor
     return this.executeFunctionHandler(functionName, args);
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitQuantity(ctx: QuantityContext): string {
     // For now, just return the number - unit handling would be more complex
     return ctx.NUMBER().text;
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitIdentifier(ctx: IdentifierContext): string {
     const identifier = ctx.IDENTIFIER();
     const delimitedIdentifier = ctx.DELIMITEDIDENTIFIER();
@@ -635,6 +794,10 @@ export class FHIRPathToOracleVisitor
     }
   }
 
+  /**
+   *
+   * @param ctx
+   */
   visitQualifiedIdentifier(ctx: QualifiedIdentifierContext): string {
     const parts = ctx.identifier().map((id) => this.visit(id));
     return parts.join(".");
@@ -652,13 +815,13 @@ export class FHIRPathToOracleVisitor
     //   (SELECT value FROM JSON_TABLE(...) WHERE ...)
     //   (SELECT JSON_VALUE(value, '$.field') FROM JSON_TABLE(...) WHERE ...)
     if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
-      const fromPart = base.substring(base.indexOf(" FROM "));
+      const fromPart = base.slice(Math.max(0, base.indexOf(" FROM ")));
       return `(SELECT JSON_VALUE(value, '$.${memberName}')${fromPart}`;
     }
     if (base.startsWith("(SELECT JSON_VALUE(value, '$.")) {
       const existingPath = /JSON_VALUE\(value, '\$\.([^']+)'\)/.exec(base)?.[1];
       if (existingPath) {
-        const rest = base.substring(base.indexOf(" FROM "));
+        const rest = base.slice(Math.max(0, base.indexOf(" FROM ")));
         return `(SELECT JSON_VALUE(value, '$.${existingPath}.${memberName}')${rest}`;
       }
     }
@@ -688,7 +851,6 @@ export class FHIRPathToOracleVisitor
    * Maps a scalar iteration column reference back to its JSON text column:
    * `scalar` to `value`, `alias.scalar` to `alias.value`, and
    * `cte.item_scalar` to `cte.item_json`.
-   *
    * @param source - The scalar column reference.
    * @returns The JSON column reference, or null when not applicable.
    */
@@ -746,8 +908,8 @@ export class FHIRPathToOracleVisitor
     const indexPattern = /\[\d+]/;
     const pathSegments = existingPath
       .split(".")
-      .filter((s) => s !== "$" && !indexPattern.exec(s));
-    const lastSegment = pathSegments[pathSegments.length - 1];
+      .filter((s) => s !== "$" && !indexPattern.test(s));
+    const lastSegment = pathSegments.at(-1);
 
     const previousFieldIsAlwaysArray =
       !!lastSegment && alwaysArrayFields.includes(lastSegment);
@@ -770,7 +932,7 @@ export class FHIRPathToOracleVisitor
     const indexPattern = /\[\d+]/;
     const pathSegments = existingPath
       .split(".")
-      .filter((s) => s !== "$" && !indexPattern.exec(s));
+      .filter((s) => s !== "$" && !indexPattern.test(s));
 
     return (
       alwaysArrayFields.includes(memberName) ||
@@ -799,6 +961,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Checks if a member name represents a FHIR array field.
+   * @param memberName
    */
   private isArrayField(memberName: string): boolean {
     const knownArrayFields = [
@@ -821,6 +984,9 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Handles nested JSON_QUERY with array indexing.
+   * @param source
+   * @param existingPath
+   * @param memberName
    */
   private handleNestedQueryWithIndex(
     source: string,
@@ -974,7 +1140,6 @@ export class FHIRPathToOracleVisitor
    * is `<something>.ofType(X)`). Returns `null` when the expression is not a
    * direct `ofType()` call, including when a member access intervenes between
    * the `ofType()` and the caller.
-   *
    * @param baseExpr - The base expression a function is being applied to.
    * @returns The raw ofType datatype name (e.g. "dateTime"), or null.
    */
@@ -1038,6 +1203,8 @@ export class FHIRPathToOracleVisitor
    * Maps polymorphic FHIR fields to their typed variants.
    * Example: value.ofType(integer) → valueInteger
    * Handles paths with array indices like "output[0].value" → "output[0].valueInteger"
+   * @param base
+   * @param typeName
    */
   private applyPolymorphicFieldMapping(base: string, typeName: string): string {
     // Handle SELECT subqueries from extension() function
@@ -1079,8 +1246,8 @@ export class FHIRPathToOracleVisitor
         return `JSON_VALUE(${source}, '$.${path}${suffix}')`;
       } else {
         // Replace the last segment with its typed variant
-        const prefix = path.substring(0, lastDotIndex);
-        const lastSegment = path.substring(lastDotIndex + 1);
+        const prefix = path.slice(0, Math.max(0, lastDotIndex));
+        const lastSegment = path.slice(Math.max(0, lastDotIndex + 1));
         return `JSON_VALUE(${source}, '$.${prefix}.${lastSegment}${suffix}')`;
       }
     }
@@ -1090,6 +1257,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Returns the type suffix for polymorphic field mapping.
+   * @param typeName
    */
   private getTypeSuffix(typeName: string): string {
     const typeMap: Record<string, string> = {
@@ -1127,6 +1295,7 @@ export class FHIRPathToOracleVisitor
   /**
    * Checks if a path represents a polymorphic field (value[x], onset[x], effective[x], deceased[x], identified[x]).
    * Handles paths with array indices like "output[0].value" or "item[1].onset".
+   * @param path
    */
   private isPolymorphicField(path: string): boolean {
     // Extract the last segment after the last dot (or the whole path if no dot)
@@ -1147,6 +1316,7 @@ export class FHIRPathToOracleVisitor
   /**
    * Cast expression to DECIMAL for numeric operations if needed.
    * JSON_VALUE returns text by default, which can't be used in arithmetic operations.
+   * @param expression
    */
   private castForNumericOperation(expression: string): string {
     // Check if expression contains JSON_VALUE and isn't already wrapped in CAST
@@ -1183,6 +1353,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Checks if the base expression represents the resource root level (not a collection).
+   * @param base
    */
   private isResourceRootLevel(base: string): boolean {
     return (
@@ -1198,6 +1369,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Extracts the source and JSON path from a base expression.
+   * @param base
    */
   private extractSourceAndPath(base: string): {
     source: string;
@@ -1224,6 +1396,9 @@ export class FHIRPathToOracleVisitor
   /**
    * Builds a subquery for filtering a collection with a where condition.
    * Returns a subquery that selects the filtered items, allowing further navigation.
+   * @param source
+   * @param jsonPath
+   * @param filterExprCtx
    */
   private buildWhereSubquery(
     source: string,
@@ -1256,7 +1431,6 @@ export class FHIRPathToOracleVisitor
    * Turns a JSON path into an element-unrolling path for JSON_TABLE: `$.a.b`
    * becomes `$.a.b[*]`; paths already ending in `[*]` or `[n]`, and the root
    * path `$`, are normalised appropriately.
-   *
    * @param jsonPath - The base JSON path.
    * @returns The path unrolled one level.
    */
@@ -1311,9 +1485,9 @@ export class FHIRPathToOracleVisitor
         "identifier",
       ];
       const pathSegments = path.split(".");
-      const lastSegment = pathSegments[pathSegments.length - 1];
+      const lastSegment = pathSegments.at(-1);
 
-      if (knownArrayFields.includes(lastSegment)) {
+      if (lastSegment !== undefined && knownArrayFields.includes(lastSegment)) {
         // This is an array field, add [0] to get first element
         return `JSON_VALUE(${source}, '${path}[0]')`;
       }
@@ -1406,7 +1580,7 @@ export class FHIRPathToOracleVisitor
 
   private formatConstantValue(value: string | number | boolean | null): string {
     if (typeof value === "string") {
-      return `'${value.replace(/'/g, "''")}'`;
+      return `'${value.replaceAll('\'', "''")}'`;
     } else if (typeof value === "number") {
       return value.toString();
     } else if (typeof value === "boolean") {
@@ -1415,7 +1589,7 @@ export class FHIRPathToOracleVisitor
     } else if (value === null || value === undefined) {
       return "NULL";
     } else {
-      return `'${JSON.stringify(value).replace(/'/g, "''")}'`;
+      return `'${JSON.stringify(value).replaceAll('\'', "''")}'`;
     }
   }
 
@@ -1466,6 +1640,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Handles exists() function without arguments, using iteration context or base.
+   * @param base
    */
   private handleExistsWithoutArgs(base?: string): string {
     if (base) {
@@ -1489,7 +1664,6 @@ export class FHIRPathToOracleVisitor
    * column, and a JSON_TABLE cannot consume a JSON_TABLE column). A JSON_QUERY
    * base is an array: its existence is checked by iterating its elements, so an
    * empty array does not count as existing; anything else is checked directly.
-   *
    * @param base - The base expression to check.
    * @returns A boolean SQL predicate.
    */
@@ -1516,6 +1690,8 @@ export class FHIRPathToOracleVisitor
   /**
    * Handles exists() with a filter expression: an EXISTS subquery over the
    * unrolled collection with the filter applied.
+   * @param base
+   * @param filterExprCtx
    */
   private handleExistsWithFilter(
     base: string | undefined,
@@ -1541,6 +1717,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Handles exists() with a transpiled argument.
+   * @param arg
    */
   private handleExistsWithArgs(arg: string): string {
     const trimmedArg = arg.trim();
@@ -1566,6 +1743,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Checks if an expression is a boolean expression (contains comparison operators).
+   * @param expr
    */
   private isBooleanExpression(expr: string): boolean {
     return (
@@ -1755,7 +1933,6 @@ export class FHIRPathToOracleVisitor
    * at the given path. If the final segment is a multi-valued reference field,
    * the first element is used (e.g. `$.generalPractitioner` becomes
    * `$.generalPractitioner[0].reference`).
-   *
    * @param path - The JSON path to the Reference object.
    * @returns The JSON path to the `reference` string.
    */
@@ -1779,7 +1956,7 @@ export class FHIRPathToOracleVisitor
       "serviceRequester",
     ];
     const segments = path.split(".");
-    const lastSegment = segments[segments.length - 1];
+    const lastSegment = segments.at(-1) ?? "";
     const cleanSegment = lastSegment.replace(/\[\d+]/, "");
     const needsIndex =
       !path.includes("[") && multiValuedReferenceFields.includes(cleanSegment);
@@ -1823,7 +2000,6 @@ export class FHIRPathToOracleVisitor
    * from the value's lexical form at SQL runtime. An absent source element
    * yields SQL NULL for every branch. All logic is emitted inline so
    * the query stays self-contained, requiring no pre-installed database object.
-   *
    * @param functionName - Either "lowBoundary" or "highBoundary".
    * @param args - Function arguments; a non-empty list is the unsupported
    *   explicit-precision form and is rejected.
@@ -1847,18 +2023,23 @@ export class FHIRPathToOracleVisitor
     // Datatype known from an explicit ofType() directly on the boundary input.
     if (resolved) {
       switch (resolved) {
-        case "date":
+        case "date": {
           return this.dateBoundarySql(value, isLow);
-        case "dateTime":
+        }
+        case "dateTime": {
           return this.dateTimeBoundarySql(value, isLow);
-        case "time":
+        }
+        case "time": {
           return this.timeBoundarySql(value, isLow);
-        case "decimal":
+        }
+        case "decimal": {
           return this.decimalBoundarySql(value, isLow);
-        default:
+        }
+        default: {
           throw new Error(
             `${functionName}() is not supported for FHIR datatype '${resolved}'`,
           );
+        }
       }
     }
 
@@ -1871,6 +2052,8 @@ export class FHIRPathToOracleVisitor
    * form at SQL runtime: a `T` marks a dateTime, a `:` marks a time, an
    * interior `-` marks a date, and anything else is treated as a decimal. NULL
    * propagates to NULL.
+   * @param value
+   * @param isLow
    */
   private lexicalBoundarySql(value: string, isLow: boolean): string {
     // Every branch must yield the same SQL type: a CASE that mixed the string
@@ -1892,6 +2075,8 @@ export class FHIRPathToOracleVisitor
    * Boundary SQL for a `date` value (maximum precision = day): a partial value
    * is padded to a full date. For `highBoundary`, a year-month resolves to the
    * last day of the month via LAST_DAY. NULL propagates to NULL.
+   * @param value
+   * @param isLow
    */
   private dateBoundarySql(value: string, isLow: boolean): string {
     if (isLow) {
@@ -1916,6 +2101,8 @@ export class FHIRPathToOracleVisitor
    * A value already carrying a time has its time component padded to
    * millisecond precision and the extreme offset appended; explicit offsets in
    * such values are not exercised by the suite. NULL propagates to NULL.
+   * @param value
+   * @param isLow
    */
   private dateTimeBoundarySql(value: string, isLow: boolean): string {
     const tz = isLow ? "+14:00" : "-12:00";
@@ -1934,6 +2121,8 @@ export class FHIRPathToOracleVisitor
    * is padded to `HH:MM:SS.fff`, filling absent components with their minimum
    * (`:00.000`) for `lowBoundary` or maximum (`:59.999`) for `highBoundary`.
    * NULL propagates to NULL.
+   * @param value
+   * @param isLow
    */
   private timeBoundarySql(value: string, isLow: boolean): string {
     return `CASE
@@ -1945,6 +2134,8 @@ export class FHIRPathToOracleVisitor
   /**
    * Pads a bare time component (`HH:MM` or `HH:MM:SS`) to millisecond precision,
    * filling absent seconds/milliseconds with their minimum or maximum.
+   * @param timeExpr
+   * @param isLow
    */
   private padTimeComponent(timeExpr: string, isLow: boolean): string {
     const seconds = isLow ? ":00.000" : ":59.999";
@@ -1962,6 +2153,8 @@ export class FHIRPathToOracleVisitor
    * `value ∓ 0.5 × 10⁻ᴺ` (e.g. `1.0` → `0.95` / `1.05`). The half-unit delta is
    * built as a decimal literal from the runtime fractional-digit count to avoid
    * relying on POWER's scale behaviour. NULL propagates to NULL.
+   * @param value
+   * @param isLow
    */
   private decimalBoundarySql(value: string, isLow: boolean): string {
     const op = isLow ? "-" : "+";

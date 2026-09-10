@@ -15,6 +15,7 @@ import type {
 export class ViewDefinitionParser {
   /**
    * Parse a ViewDefinition from JSON.
+   * @param json
    */
   static parseViewDefinition(json: string | object): ViewDefinition {
     const data: UnvalidatedViewDefinition =
@@ -29,6 +30,7 @@ export class ViewDefinitionParser {
 
   /**
    * Parse a test suite from the SQL on FHIR test format.
+   * @param json
    */
   static parseTestSuite(json: string | object): TestSuite {
     const data = typeof json === "string" ? JSON.parse(json) : json;
@@ -42,6 +44,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate and narrow a ViewDefinition structure using type predicate.
+   * @param data
    */
   private static isValidViewDefinition(
     data: UnvalidatedViewDefinition,
@@ -82,6 +85,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate constant names match SQL on FHIR specification.
+   * @param constants
    */
   private static validateConstants(constants: unknown[]): void {
     for (const constant of constants) {
@@ -106,6 +110,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate select element using type predicate.
+   * @param select
    */
   private static isValidSelect(
     select: UnvalidatedSelect,
@@ -122,6 +127,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate select element has required structure.
+   * @param select
    */
   private static validateSelectStructure(select: UnvalidatedSelect): void {
     if (!select.column && !select.select && !select.unionAll) {
@@ -134,6 +140,7 @@ export class ViewDefinitionParser {
   /**
    * Validate forEach, forEachOrNull, and repeat expressions.
    * Ensures mutual exclusivity between these iteration directives.
+   * @param select
    */
   private static validateSelectExpressions(select: UnvalidatedSelect): void {
     if (select.forEach && typeof select.forEach !== "string") {
@@ -152,6 +159,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate that repeat is an array of non-empty strings.
+   * @param repeat
    */
   private static validateRepeatExpression(repeat: unknown): void {
     if (repeat === undefined) {
@@ -171,6 +179,7 @@ export class ViewDefinitionParser {
 
   /**
    * Enforce mutual exclusivity: only one of forEach, forEachOrNull, or repeat.
+   * @param select
    */
   private static validateIterationDirectiveMutualExclusivity(
     select: UnvalidatedSelect,
@@ -192,6 +201,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate columns in a select element.
+   * @param select
    */
   private static validateSelectColumns(select: UnvalidatedSelect): boolean {
     if (select.column) {
@@ -206,6 +216,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate nested select elements.
+   * @param select
    */
   private static validateNestedSelects(select: UnvalidatedSelect): boolean {
     if (select.select) {
@@ -220,6 +231,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate unionAll branches.
+   * @param select
    */
   private static validateUnionAll(select: UnvalidatedSelect): boolean {
     if (select.unionAll) {
@@ -235,6 +247,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate column using type predicate.
+   * @param column
+   * @param selectContext
    */
   private static isValidColumn(
     column: UnvalidatedColumn,
@@ -267,6 +281,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate column tag structure.
+   * @param column
    */
   private static validateColumnTags(column: UnvalidatedColumn): void {
     if (column.tag === undefined) {
@@ -284,6 +299,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate a single tag object.
+   * @param columnName
+   * @param tag
    */
   private static validateSingleTag(columnName: string, tag: unknown): void {
     if (typeof tag !== "object" || tag === null) {
@@ -313,6 +330,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate collection property constraints.
+   * @param column
+   * @param selectContext
    */
   private static validateCollectionConstraints(
     column: UnvalidatedColumn,
@@ -349,6 +368,7 @@ export class ViewDefinitionParser {
 
   /**
    * Validate that all branches of a unionAll have the same columns in the same order.
+   * @param unionAllBranches
    */
   private static validateUnionAllColumns(
     unionAllBranches: UnvalidatedSelect[],
@@ -380,11 +400,11 @@ export class ViewDefinitionParser {
       }
 
       // Check if column names and order match
-      for (let j = 0; j < firstBranch.length; j++) {
-        if (firstBranch[j].name !== currentBranch[j].name) {
+      for (const [j, element] of firstBranch.entries()) {
+        if (element.name !== currentBranch[j].name) {
           throw new Error(
             `unionAll branches must have the same columns in the same order. ` +
-              `Column at position ${j + 1}: branch 1 has "${firstBranch[j].name}", ` +
+              `Column at position ${j + 1}: branch 1 has "${element.name}", ` +
               `but branch ${i + 1} has "${currentBranch[j].name}".`,
           );
         }
@@ -395,6 +415,7 @@ export class ViewDefinitionParser {
   /**
    * Extract column definitions from a select element.
    * Handles direct columns, forEach columns, and nested select columns.
+   * @param select
    */
   private static extractColumnsFromSelect(
     select: UnvalidatedSelect,

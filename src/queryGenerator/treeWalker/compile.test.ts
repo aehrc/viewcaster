@@ -25,11 +25,11 @@
  */
 
 import { describe, expect, it } from "vitest";
+
 import { SqlOnFhir } from "../../index";
 
 /**
  * Transpile a ViewDefinition object to SQL.
- *
  * @param viewDef - The ViewDefinition (unvalidated shape is fine).
  * @param options - Optional SqlOnFhir options.
  * @returns The generated SQL.

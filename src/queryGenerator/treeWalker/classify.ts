@@ -2,8 +2,8 @@
  * Classifies a ViewDefinition select node into one of the walker's NodeKinds.
  */
 
-import type { ViewDefinitionSelect } from "../../types.js";
 import type { NodeKind } from "./types.js";
+import type { ViewDefinitionSelect } from "../../types.js";
 
 /**
  * Classifies a ViewDefinition select node into one of the walker's NodeKinds.
@@ -12,7 +12,6 @@ import type { NodeKind } from "./types.js";
  * `repeat`, `unionAll`, `select` (Group), and finally `ColumnsOnly` as the
  * base case. A node that carries multiple operator fields is classified as the
  * outermost one; inner operators surface when the walker descends.
- *
  * @param node - The select node to classify.
  * @returns The `NodeKind` string discriminant that determines which operator
  *   walker handles this node.

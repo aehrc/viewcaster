@@ -6,18 +6,18 @@
  * table with `idx` (FOR ORDINALITY, 1-based), `value` (whole element) and
  * `scalar` columns. Nested iteration sources are wrapped in JSON_QUERY so a
  * JSON_TABLE never consumes another JSON_TABLE's column directly (ORA-40556).
- *
  * @author John Grimes
  */
 
-import type { TranspilerContext } from "../../../fhirpath/transpiler.js";
 import {
   formatJsonSuffix,
   jsonTableColumns,
 } from "../../../fhirpath/visitor.js";
+import { freshAlias } from "../aliasGenerator.js";
+
+import type { TranspilerContext } from "../../../fhirpath/transpiler.js";
 import type { ViewDefinitionSelect } from "../../../types.js";
 import type { PathParser } from "../../PathParser.js";
-import { freshAlias } from "../aliasGenerator.js";
 import type {
   Context,
   Fragment,
@@ -42,7 +42,6 @@ interface ForEachDeps {
  * Path features handled via `PathParser`: `.where()` filters, `.first()`
  * selectors, array indexing, and multi-segment array flattening (nested
  * `CROSS APPLY OPENJSON` chains).
- *
  * @param node - The ForEach or ForEachOrNull select node.  `node.forEach` or
  *   `node.forEachOrNull` supplies the FHIRPath expression to iterate.
  * @param ctx - The current walker context; the inner context is derived from
@@ -166,6 +165,12 @@ function buildInnerCtx(
  * Builds the CROSS/OUTER APPLY clause string for a forEach path, handling
  * `.where()`, `.first()`, array indexing, and multi-segment array
  * flattening.
+ * @param rawPath
+ * @param source
+ * @param alias
+ * @param applyType
+ * @param transpilerCtx
+ * @param pathParser
  */
 function buildForEachApply(
   rawPath: string,
@@ -220,7 +225,6 @@ function buildForEachApply(
  * consumed directly. `.first()` selectors resolve as an explicit `[0]` path
  * index; where conditions become a row filter in a subquery, which preserves
  * forEachOrNull's null-padded row.
- *
  * @param applyType - "CROSS APPLY" or "OUTER APPLY".
  * @param source - The JSON source expression.
  * @param path - The collection path below the source.
@@ -246,9 +250,9 @@ function buildSimpleApply(
   const fmt = formatJsonSuffix(storage);
   const indexedPath = useFirst
     ? `${path}[0]`
-    : arrayIndex !== null
-      ? `${path}[${arrayIndex}]`
-      : path;
+    : (arrayIndex === null
+      ? path
+      : `${path}[${arrayIndex}]`);
 
   const jsonTable = isJsonTableColumn(source)
     ? `JSON_TABLE(JSON_QUERY(${source}${fmt}, '$.${indexedPath}' RETURNING CLOB), '$[*]' COLUMNS (${columns}))`
@@ -264,7 +268,6 @@ function buildSimpleApply(
  * Builds a chain of nested JSON_TABLE APPLY clauses for multi-segment paths.
  * Each level after the first consumes the previous level's `value` column
  * wrapped in JSON_QUERY (ORA-40556).
- *
  * @param arrayPaths - The array path segments to chain.
  * @param source - The JSON source expression for the first level.
  * @param finalAlias - The alias for the last level.
@@ -273,6 +276,8 @@ function buildSimpleApply(
  * @param _arrayIndex - An explicit array index for the last level (currently
  *   unhandled for nested paths; suite paths do not exercise it).
  * @param _whereCondition - A predicate for the last level (reserved).
+ * @param whereCondition
+ * @param transpilerCtx
  * @returns The chained APPLY clauses.
  */
 function buildNestedApply(
@@ -300,9 +305,9 @@ function buildNestedApply(
     const wrap = isJsonTableColumn(currentSource);
     const columns = jsonTableColumns(storage);
     const segmentPath =
-      segmentIndex !== null
-        ? `$.${cleanSegment}[${segmentIndex}]`
-        : `$.${cleanSegment}`;
+      segmentIndex === null
+        ? `$.${cleanSegment}`
+        : `$.${cleanSegment}[${segmentIndex}]`;
     const tableInput = wrap
       ? `JSON_QUERY(${currentSource}${fmt}, '${segmentPath}' RETURNING CLOB), '$[*]'`
       : `${currentSource}${fmt}, '${segmentPath}[*]'`;
@@ -322,7 +327,6 @@ function buildNestedApply(
  * (an APPLY alias's `value`, or a repeat CTE's `item_json`). Such a column
  * cannot be consumed directly by another JSON_TABLE (ORA-40556) and must be
  * wrapped in JSON_QUERY.
- *
  * @param source - The source expression.
  * @returns True when the expression is a JSON_TABLE-produced column.
  */
