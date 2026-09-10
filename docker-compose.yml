@@ -1,0 +1,32 @@
+# Local Oracle Database 23ai Free for development and native JSON testing.
+#
+# Usage:
+#   docker compose up -d oracle
+#   docker compose logs -f oracle   # wait for "DATABASE IS READY TO USE!"
+#
+# Connect as fhir/fhir to localhost:1521/FREEPDB1 (set ORACLE_LOCAL_PORT to
+# publish on a different host port, e.g. when 1521 is taken by a forwarder).
+# The application user is created once, on first start, by
+# docker/init/01_create_user.sql.
+services:
+  oracle:
+    image: container-registry.oracle.com/database/free:latest
+    container_name: sof-oracle-db
+    ports:
+      - "${ORACLE_LOCAL_PORT:-1521}:1521"
+    environment:
+      ORACLE_PWD: oracle
+      ORACLE_CHARACTERSET: AL32UTF8
+    volumes:
+      - oracle-data:/opt/oracle/oradata
+      - ./docker/init:/opt/oracle/scripts/setup:ro
+    healthcheck:
+      test: ["CMD", "/opt/oracle/checkDBStatus.sh"]
+      interval: 30s
+      timeout: 15s
+      retries: 20
+      start_period: 5m
+    shm_size: 1g
+
+volumes:
+  oracle-data:
