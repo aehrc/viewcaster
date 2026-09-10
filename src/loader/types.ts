@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Type definitions for the NDJSON loader.
  *
@@ -5,23 +24,26 @@
  */
 
 /**
- * Database connection configuration.
+ * Database connection configuration (contracts/api.md `DatabaseOptions`).
+ *
+ * An explicit {@link DatabaseOptions.connectString} overrides the EZConnect
+ * string assembled from {@link DatabaseOptions.host}, {@link
+ * DatabaseOptions.port} and {@link DatabaseOptions.serviceName} (research
+ * R13).
  */
-export interface DatabaseConfig {
-  /** Database server hostname or IP address. */
-  host: string;
-  /** Database server port. */
+export interface DatabaseOptions {
+  /** Database host (default: `localhost`; env `ORACLE_HOST`). */
+  host?: string;
+  /** Listener port (default: `1521`; env `ORACLE_PORT`). */
   port?: number;
-  /** Database username. */
+  /** Database service name (default: `FREEPDB1`; env `ORACLE_SERVICE_NAME`). */
+  serviceName?: string;
+  /** Database username (env `ORACLE_USER`). */
   user: string;
-  /** Database password. */
+  /** Database password (env `ORACLE_PASSWORD`). */
   password: string;
-  /** Database name. */
-  database: string;
-  /** Whether to trust the server certificate. */
-  trustServerCertificate?: boolean;
-  /** Request timeout in milliseconds (default: 300000). */
-  requestTimeout?: number;
+  /** Full connect string; overrides host/port/serviceName (env `ORACLE_CONNECT_STRING`). */
+  connectString?: string;
 }
 
 /**
@@ -37,37 +59,54 @@ export interface DiscoveredFile {
 }
 
 /**
- * Options for the NDJSON loader.
+ * A file present in the loading directory that was not selected for loading.
  */
-export interface LoaderOptions {
+export interface SkippedFile {
+  /** Name of the skipped file. */
+  file: string;
+  /** Why the file was skipped. */
+  reason: string;
+}
+
+/**
+ * The result of scanning a directory for NDJSON files.
+ */
+export interface DiscoveryResult {
+  /** Files selected for loading. */
+  files: DiscoveredFile[];
+  /** Files skipped, with a reason for each (FR: skipped with a report). */
+  skipped: SkippedFile[];
+}
+
+/**
+ * Options for the NDJSON loader (contracts/api.md `LoadOptions`).
+ */
+export interface LoadOptions {
   /** Directory containing NDJSON files. */
   directory: string;
   /** Database connection configuration. */
-  database: DatabaseConfig;
-  /** File naming pattern (default: {ResourceType}.ndjson). */
-  pattern?: string;
+  database: DatabaseOptions;
   /** Filter to specific resource type. */
   resourceType?: string;
   /** Table name for storing resources (default: fhir_resources). */
   tableName?: string;
-  /** Schema name (default: dbo). */
+  /** Schema name (default: the connected user's schema). */
   schemaName?: string;
   /**
-   * Storage type for the resources table `json` column. One of `NVARCHAR(MAX)`
-   * (default) or `JSON`. Matching is case-insensitive and tolerant of
-   * surrounding whitespace. `JSON` selects SQL Server 2025's native JSON type
-   * and requires SQL Server 2025 or later; when omitted the column is created as
-   * `NVARCHAR(MAX)`, exactly as in earlier releases. The value is validated
-   * against the allowlist before any database connection is opened.
+   * Storage type for the resources table `json` column. One of `BLOB`
+   * (default, Oracle 19c+, `CHECK (json IS JSON)`) or `JSON` (native type,
+   * 21c+). Matching is case-insensitive. `JSON` on a pre-21c server fails
+   * fast. The value is validated against the allowlist before any database
+   * connection is opened.
    */
   resourceJsonDataType?: string;
-  /** Create table if it doesn't exist. */
+  /** Create the table if it doesn't exist (default: true). */
   createTable?: boolean;
-  /** Truncate table before loading. */
+  /** Truncate the table before loading. */
   truncate?: boolean;
-  /** Number of rows per batch for bulk insert. */
+  /** Number of rows per `executeMany` batch (default: 1000). */
   batchSize?: number;
-  /** Number of files to process in parallel. */
+  /** Number of files to process in parallel (default: 4). */
   parallel?: number;
   /** Continue loading other files if one fails. */
   continueOnError?: boolean;
@@ -77,7 +116,7 @@ export interface LoaderOptions {
   verbose?: boolean;
   /** Minimal output. */
   quiet?: boolean;
-  /** Show progress bar. */
+  /** Show progress line. */
   progress?: boolean;
 }
 
@@ -114,24 +153,6 @@ export interface LoaderProgress {
 }
 
 /**
- * Summary of the loading operation.
- */
-export interface LoaderSummary {
-  /** Number of files successfully loaded. */
-  filesLoaded: number;
-  /** Number of files that failed to load. */
-  filesFailed: number;
-  /** Total rows loaded. */
-  rowsLoaded: number;
-  /** Total rows that failed to load. */
-  rowsFailed: number;
-  /** Duration in milliseconds. */
-  durationMs: number;
-  /** Errors encountered during loading. */
-  errors: Array<{ file: string; error: string }>;
-}
-
-/**
  * Result of loading a single file.
  */
 export interface FileLoadResult {
@@ -141,8 +162,31 @@ export interface FileLoadResult {
   rowsLoaded: number;
   /** Number of rows that failed to load. */
   rowsFailed: number;
+  /** Error messages encountered while loading the file. */
+  errors: string[];
   /** Duration in milliseconds. */
   durationMs: number;
-  /** Error message if the file failed to load. */
+  /** Primary error message if the file failed to load. */
   error?: string;
+}
+
+/**
+ * Result of a loading operation (contracts/api.md `LoadResult`).
+ */
+export interface LoadResult {
+  /** Per-file outcome, one entry per loaded file. */
+  files: Array<{
+    /** Path of the loaded file. */
+    file: string;
+    /** FHIR resource type derived from the file name. */
+    resourceType: string;
+    /** Number of rows successfully loaded from the file. */
+    rowsLoaded: number;
+    /** Error messages for rows or the whole file. */
+    errors: string[];
+  }>;
+  /** Total rows loaded across all files. */
+  totalRows: number;
+  /** Whether any file failed to load. */
+  failed: boolean;
 }

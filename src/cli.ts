@@ -9,8 +9,9 @@
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync } from "fs";
-import { SqlOnFhir } from "./index.js";
+import { createLoadCommand } from "./load.js";
 import { normaliseResourceJsonDataType } from "./validation.js";
+import { SqlOnFhir } from "./index.js";
 
 /**
  * Read input from stdin or file.
@@ -140,7 +141,7 @@ async function main(): Promise<void> {
 
   // Add subcommands.
   program.addCommand(createTranspileCommand());
-
+  program.addCommand(createLoadCommand());
   // Parse arguments.
   await program.parseAsync(process.argv);
 

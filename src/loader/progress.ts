@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Progress tracking for NDJSON loader.
  * Provides real-time progress updates and statistics.
@@ -9,8 +28,8 @@ import type {
   DiscoveredFile,
   FileLoadResult,
   FileProgress,
+  LoadResult,
   LoaderProgress,
-  LoaderSummary,
 } from "./types.js";
 
 /**
@@ -111,7 +130,7 @@ export function printVerboseProgress(progress: LoaderProgress): void {
   console.log(formatProgressStatus(progress));
   for (const [, fileProgress] of progress.fileProgress) {
     if (fileProgress.completed) {
-      const status = fileProgress.error ? "✗ FAILED" : "✓ COMPLETE";
+      const status = fileProgress.error ? "FAILED" : "COMPLETE";
       const rows = `${fileProgress.rowsLoaded} rows`;
       const failed =
         fileProgress.rowsFailed > 0
@@ -137,64 +156,53 @@ export function printSimpleProgress(progress: LoaderProgress): void {
 }
 
 /**
- * Create a summary of the loading operation.
+ * Build the load result from the progress tracker (contracts/api.md
+ * `LoadResult`).
  *
  * @param progress - Progress tracker.
- * @param durationMs - Duration in milliseconds.
- * @returns Loader summary.
+ * @returns The load result with one entry per file.
  */
-export function createSummary(
-  progress: LoaderProgress,
-  durationMs: number,
-): LoaderSummary {
-  const errors: Array<{ file: string; error: string }> = [];
-  let filesLoaded = 0;
-  let filesFailed = 0;
-
+export function createLoadResult(progress: LoaderProgress): LoadResult {
+  const files: LoadResult["files"] = [];
   for (const [, fileProgress] of progress.fileProgress) {
-    if (fileProgress.error) {
-      filesFailed++;
-      errors.push({ file: fileProgress.file.path, error: fileProgress.error });
-    } else if (fileProgress.completed) {
-      filesLoaded++;
-    }
+    files.push({
+      file: fileProgress.file.path,
+      resourceType: fileProgress.file.resourceType,
+      rowsLoaded: fileProgress.rowsLoaded,
+      errors: fileProgress.error ? [fileProgress.error] : [],
+    });
   }
-
   return {
-    filesLoaded,
-    filesFailed,
-    rowsLoaded: progress.totalRowsLoaded,
-    rowsFailed: progress.totalRowsFailed,
-    durationMs,
-    errors,
+    files,
+    totalRows: progress.totalRowsLoaded,
+    failed: progress.totalRowsFailed > 0,
   };
 }
 
 /**
  * Print a summary of the loading operation.
  *
- * @param summary - Loader summary.
+ * @param result - The load result.
+ * @param durationMs - Duration in milliseconds.
  */
-export function printSummary(summary: LoaderSummary): void {
-  console.log("\n\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
+export function printSummary(result: LoadResult, durationMs: number): void {
+  console.log("\n━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
   console.log("NDJSON Loader Summary");
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-  console.log(`Files loaded:   ${summary.filesLoaded}`);
-  console.log(`Files failed:   ${summary.filesFailed}`);
-  console.log(`Rows loaded:    ${summary.rowsLoaded}`);
-  console.log(`Rows failed:    ${summary.rowsFailed}`);
-  console.log(`Duration:       ${formatDuration(summary.durationMs)}`);
-  console.log(
-    `Throughput:     ${formatThroughput(summary.rowsLoaded, summary.durationMs)} rows/sec`,
-  );
-
-  if (summary.errors.length > 0) {
-    console.log("\nErrors:");
-    for (const error of summary.errors) {
-      console.log(`  ${error.file}: ${error.error}`);
+  for (const file of result.files) {
+    const failed = file.errors.length > 0 ? " (FAILED)" : "";
+    console.log(
+      `  ${file.resourceType}: ${file.rowsLoaded} rows loaded${failed}`,
+    );
+    for (const error of file.errors) {
+      console.log(`    Error: ${error}`);
     }
   }
-
+  console.log(`Total rows loaded: ${result.totalRows}`);
+  console.log(`Duration:       ${formatDuration(durationMs)}`);
+  console.log(
+    `Throughput:     ${formatThroughput(result.totalRows, durationMs)} rows/sec`,
+  );
   console.log("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━\n");
 }
 

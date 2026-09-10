@@ -23,21 +23,22 @@
  * and the resource-type filter.
  */
 
-import { mkdtempSync, mkdirSync, rmSync, writeFileSync } from "fs";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { tmpdir } from "os";
 import { join } from "path";
-import { afterEach, beforeEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import {
   discoverFiles,
   groupFilesByResourceType,
   parseFilename,
 } from "./discovery.js";
-import type { LoaderOptions } from "./types.js";
+import type { LoadOptions } from "./types.js";
 
-let tempDir: string;
+let tempDir: string | undefined;
 
 afterEach(() => {
   if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+  tempDir = undefined;
 });
 
 /**
@@ -45,17 +46,16 @@ afterEach(() => {
  * pointing at it.
  *
  * @param files - Map of file name to content.
+ * @param extra - Extra loader options.
  * @returns Loader options for the fixture directory.
  */
 function optionsWith(
   files: Record<string, string>,
-  extra: Partial<LoaderOptions> = {},
-): LoaderOptions {
+  extra: Partial<LoadOptions> = {},
+): LoadOptions {
   tempDir = mkdtempSync(join(tmpdir(), "sof-discovery-"));
   for (const [name, content] of Object.entries(files)) {
-    const filePath = join(tempDir, name);
-    mkdirSync(join(filePath, ".."), { recursive: true });
-    writeFileSync(filePath, content, "utf-8");
+    writeFileSync(join(tempDir, name), content, "utf-8");
   }
   return {
     directory: tempDir,
@@ -87,7 +87,7 @@ describe("discoverFiles", () => {
     const options = optionsWith({
       "Patient.ndjson": "{}\n",
       "README.md": "not data",
-      "patient.ndjson": "{}\n",
+      "lowercase-observation.ndjson": "{}\n",
       "Patient.ndjson.bak": "{}\n",
     });
     const { files, skipped } = discoverFiles(options);
@@ -96,10 +96,10 @@ describe("discoverFiles", () => {
     expect(skippedNames).toEqual([
       "Patient.ndjson.bak",
       "README.md",
-      "patient.ndjson",
+      "lowercase-observation.ndjson",
     ]);
     for (const entry of skipped) {
-      expect(entry.reason).toContain("Patient.ndjson");
+      expect(entry.reason).toContain("ndjson");
     }
   });
 
@@ -151,11 +151,14 @@ describe("parseFilename", () => {
   });
 
   it("rejects filenames that do not match the pattern", () => {
-    expect(parseFilename("patient.ndjson", "{ResourceType}.ndjson")).toBeUndefined();
-    expect(parseFilename("Patient.txt", "{ResourceType}.ndjson")).toBeUndefined();
+    expect(parseFilename("patient.ndjson", "{ResourceType}.ndjson"))
+      .toBeUndefined();
+    expect(parseFilename("Patient.txt", "{ResourceType}.ndjson"))
+      .toBeUndefined();
     expect(parseFilename("Patient.ndjson.extra", "{ResourceType}.ndjson"))
       .toBeUndefined();
-    expect(parseFilename(".ndjson", "{ResourceType}.ndjson")).toBeUndefined();
+    expect(parseFilename(".ndjson", "{ResourceType}.ndjson"))
+      .toBeUndefined();
   });
 
   it("rejects an empty resource type", () => {

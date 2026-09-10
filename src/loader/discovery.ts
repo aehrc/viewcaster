@@ -1,13 +1,36 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * File discovery for NDJSON loader.
  * Scans directories and matches files against configurable patterns.
  *
  * @author John Grimes
  */
-
 import { readdirSync, statSync } from "fs";
 import { join } from "path";
-import type { DiscoveredFile, LoaderOptions } from "./types.js";
+import type {
+  DiscoveredFile,
+  DiscoveryResult,
+  LoadOptions,
+  SkippedFile,
+} from "./types.js";
 
 /**
  * Default file pattern.
@@ -18,15 +41,17 @@ const DEFAULT_PATTERN = "{ResourceType}.ndjson";
 
 /**
  * Discover NDJSON files in a directory matching the specified pattern.
+ * Files not matching the pattern are skipped and reported (data-model.md:
+ * non-matching filenames are skipped with a report).
  *
- * @param options - Loader options containing directory and pattern.
- * @returns Array of discovered files with metadata.
+ * @param options - Loader options containing directory and resource type.
+ * @returns Selected files plus a report of skipped files.
  */
-export function discoverFiles(options: LoaderOptions): DiscoveredFile[] {
-  const pattern = options.pattern ?? DEFAULT_PATTERN;
+export function discoverFiles(options: LoadOptions): DiscoveryResult {
   const files: DiscoveredFile[] = [];
+  const skipped: SkippedFile[] = [];
 
-  // Get all files from the directory.
+  // Get all entries from the directory.
   const entries = readdirSync(options.directory);
 
   for (const entry of entries) {
@@ -39,18 +64,24 @@ export function discoverFiles(options: LoaderOptions): DiscoveredFile[] {
     }
 
     // Parse the filename against the pattern.
-    const metadata = parseFilename(entry, pattern);
+    const metadata = parseFilename(entry, DEFAULT_PATTERN);
 
-    // Skip files that don't match the pattern.
+    // Report files that don't match the pattern.
     if (!metadata) {
+      skipped.push({
+        file: entry,
+        reason: `does not match {ResourceType}.ndjson`,
+      });
       continue;
     }
 
     // Apply resource type filter if specified.
-    if (
-      options.resourceType &&
-      metadata.resourceType !== options.resourceType
-    ) {
+    if (options.resourceType && metadata.resourceType !== options.resourceType)
+ {
+      skipped.push({
+        file: entry,
+        reason: `resource type ${metadata.resourceType} does not match the requested type ${options.resourceType}`,
+      });
       continue;
     }
 
@@ -61,17 +92,17 @@ export function discoverFiles(options: LoaderOptions): DiscoveredFile[] {
     });
   }
 
-  return files;
+  return { files, skipped };
 }
 
 /**
- * Parse a filename against a pattern to extract resource type.
+ * Parse a filename against the pattern to extract resource type.
  *
  * Pattern placeholders:
  * - {ResourceType} - Required, matches the FHIR resource type.
  *
  * Example:
- * - Pattern: "{ResourceType}.ndjson" matches "Patient.ndjson" → { resourceType: "Patient" }
+ * - Pattern: "{ResourceType}.ndjson" matches "Patient.ndjson" -> { resourceType: "Patient" }
  *
  * @param filename - The filename to parse.
  * @param pattern - The pattern to match against.
@@ -90,7 +121,7 @@ export function parseFilename(
   );
 
   // Escape special regex characters in the pattern (dots, etc.).
-  regexPattern = regexPattern.replace(/\./g, "\\.");
+  regexPattern = regexPattern.replaceAll(".", "\\.");
 
   // Anchor the pattern to match the entire filename.
   regexPattern = `^${regexPattern}$`;

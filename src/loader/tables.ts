@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Table management for NDJSON loader.
  * Creates and manages the single fhir_resources table.
@@ -5,11 +24,18 @@
  * @author John Grimes
  */
 
-import sql, { type ConnectionPool } from "mssql";
+import oracledb from "oracledb";
 import {
   type ResourceJsonDataType,
-  validateSqlServerIdentifier,
+  validateOracleIdentifier,
 } from "../validation.js";
+
+/**
+ * The major Oracle Database version that introduced the native JSON column
+ * type (21c). Oracle encodes versions in `oracleServerVersion` as e.g.
+ * 1900000000 for 19c.
+ */
+const NATIVE_JSON_MAJOR_VERSION = 21;
 
 /**
  * The DDL statements needed to create the resources table and its index.
@@ -22,110 +48,123 @@ export interface CreateTableStatements {
 }
 
 /**
- * Build the DDL statements for the resources table and its index.
+ * Qualify a table name with its schema when a schema is given. Identifiers
+ * are emitted unquoted (research R7) and must have been validated by the
+ * caller.
+ *
+ * @param schemaName - Schema name, or undefined for the current schema.
+ * @param tableName - Table name.
+ * @returns The qualified table name.
+ */
+function qualifyTableName(
+  schemaName: string | undefined,
+  tableName: string,
+): string {
+  return schemaName ? `${schemaName}.${tableName}` : tableName;
+}
+
+/**
+ * Build the DDL statements for the resources table and its index (DDL per
+ * data-model.md).
  *
  * This is a pure function so the generated SQL can be unit-tested without a
  * database. The `json` column is typed with the resolved {@link
- * ResourceJsonDataType}; with the default `NVARCHAR(MAX)` the output is
- * byte-for-byte identical to earlier releases (SC-001). Identifiers are assumed
- * to have been validated by the caller (see {@link createTable}).
+ * ResourceJsonDataType}; with the default `BLOB` variant the column carries
+ * an `IS JSON` check constraint. Identifiers are assumed to have been
+ * validated by the caller (see {@link createTable}).
  *
- * @param schemaName - Schema name (already validated).
+ * @param schemaName - Schema name (already validated), or undefined for the
+ *   current schema.
  * @param tableName - Table name (already validated).
  * @param jsonType - Resolved canonical storage type for the `json` column.
  * @returns The `CREATE TABLE` and `CREATE INDEX` statements.
  */
 export function buildCreateTableStatements(
-  schemaName: string,
+  schemaName: string | undefined,
   tableName: string,
   jsonType: ResourceJsonDataType,
 ): CreateTableStatements {
   // Only the json column's type varies; every other part of the DDL is held
-  // constant so the default path is unchanged from earlier releases.
-  const createTable = `
-    CREATE TABLE [${schemaName}].[${tableName}] (
-      [id] INT IDENTITY(1,1) NOT NULL PRIMARY KEY,
-      [resource_type] NVARCHAR(64) NOT NULL,
-      [json] ${jsonType} NOT NULL
-    )
-  `;
+  // constant.
+  const jsonColumn =
+    jsonType === "JSON"
+      ? "json          JSON NOT NULL"
+      : "json          BLOB NOT NULL CHECK (json IS JSON)";
+  const qualified = qualifyTableName(schemaName, tableName);
 
-  const createIndex = `
-    CREATE INDEX [IX_${tableName}_resource_type]
-    ON [${schemaName}].[${tableName}] ([resource_type])
-  `;
+  const createTable = `CREATE TABLE ${qualified} (
+  id            NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+  resource_type VARCHAR2(64) NOT NULL,
+  ${jsonColumn}
+)`;
+
+  const createIndex = `CREATE INDEX ix_${tableName}_resource_type
+  ON ${qualified} (resource_type)`;
 
   return { createTable, createIndex };
 }
 
 /**
- * Render an INFORMATION_SCHEMA column type for a diagnostic message.
+ * Render an ALL_TAB_COLUMNS column type for a diagnostic message.
  *
- * Length-bearing types are shown with their declared length, with the `-1`
- * sentinel rendered as `MAX`; types reported without a length (such as the
- * native `JSON` type) are shown as the bare type name.
+ * Length-bearing types are shown with their declared character length; types
+ * reported without a length (such as `BLOB`, `CLOB` or the native `JSON`
+ * type) are shown as the bare type name.
  *
- * @param dataType - The INFORMATION_SCHEMA DATA_TYPE.
- * @param characterMaximumLength - The INFORMATION_SCHEMA CHARACTER_MAXIMUM_LENGTH.
- * @returns A readable type such as `VARCHAR(100)`, `NVARCHAR(MAX)` or `JSON`.
+ * @param dataType - The ALL_TAB_COLUMNS DATA_TYPE.
+ * @param charLength - The ALL_TAB_COLUMNS CHAR_LENGTH, when non-zero.
+ * @returns A readable type such as `VARCHAR2(255)`, `CLOB` or `JSON`.
  */
-function formatColumnType(
-  dataType: string,
-  characterMaximumLength: number | null,
-): string {
+function formatColumnType(dataType: string, charLength?: number | null): string {
   const baseType = dataType.trim().toUpperCase();
-  if (characterMaximumLength === null) {
+  if (!charLength) {
     return baseType;
   }
-  const length =
-    characterMaximumLength === -1 ? "MAX" : String(characterMaximumLength);
-  return `${baseType}(${length})`;
+  return `${baseType}(${charLength})`;
 }
 
 /**
- * Resolve an INFORMATION_SCHEMA column description to a canonical json type.
+ * Resolve an ALL_TAB_COLUMNS column description to a canonical json type.
  *
- * Only two column shapes can faithfully hold a serialised FHIR resource: the
- * native type (`data_type = 'json'`) and `NVARCHAR(MAX)` (`data_type =
- * 'nvarchar'` with `character_maximum_length = -1`). Any other shape - a bounded
- * `NVARCHAR(64)`, a non-Unicode `VARCHAR`, `TEXT`, and so on - is rejected here
- * rather than silently coerced to `NVARCHAR(MAX)`. Coercion would let the
- * mismatch check pass and the loader write into a column that cannot hold the
- * data, surfacing later as a `String or binary data would be truncated` error
- * or, under non-Unicode `VARCHAR`, silent character corruption. Failing fast
- * turns that late, data-dependent failure into an early, actionable
- * configuration error (Constitution Principle IV).
+ * Only two column shapes can faithfully hold a serialised FHIR resource (the
+ * two variants of data-model.md): the BLOB variant (`DATA_TYPE = 'BLOB'`,
+ * expected to carry the `IS JSON` check constraint) and the native type
+ * (`DATA_TYPE = 'JSON'`, 21c+). Any other shape - a bounded `VARCHAR2`, a
+ * `CLOB`, and so on - is rejected here rather than silently coerced to a
+ * supported type. Coercion would let the mismatch check pass and the loader
+ * write into a column that cannot hold the data, surfacing later as a
+ * data-dependent error. Failing fast turns that late failure into an early,
+ * actionable configuration error.
  *
- * @param dataType - The INFORMATION_SCHEMA DATA_TYPE.
- * @param characterMaximumLength - The INFORMATION_SCHEMA CHARACTER_MAXIMUM_LENGTH.
- * @returns The canonical resource json data type (`JSON` or `NVARCHAR(MAX)`).
- * @throws Error if the column is neither native `JSON` nor `NVARCHAR(MAX)`. The
- *   message names the offending type and the two acceptable types.
+ * @param dataType - The ALL_TAB_COLUMNS DATA_TYPE.
+ * @param charLength - The ALL_TAB_COLUMNS CHAR_LENGTH, when non-zero.
+ * @returns The canonical resource json data type (`BLOB` or `JSON`).
+ * @throws Error if the column is neither the BLOB variant nor native `JSON`.
+ *   The message names the offending type and the two acceptable types.
  */
 export function resolveColumnJsonDataType(
   dataType: string,
-  characterMaximumLength: number | null,
+  charLength?: number | null,
 ): ResourceJsonDataType {
-  const normalised = dataType.trim().toLowerCase();
-  if (normalised === "json") {
+  const normalised = dataType.trim().toUpperCase();
+  if (normalised === "BLOB") {
+    return "BLOB";
+  }
+  if (normalised === "JSON") {
     return "JSON";
   }
-  // NVARCHAR(MAX) is the only nvarchar form that can hold an arbitrarily long
-  // resource; bounded lengths would truncate, so the length is required here.
-  if (normalised === "nvarchar" && characterMaximumLength === -1) {
-    return "NVARCHAR(MAX)";
-  }
   throw new Error(
-    `Existing [json] column is ` +
-      `${formatColumnType(dataType, characterMaximumLength)}, which cannot ` +
-      `safely hold serialised FHIR resources. Expected NVARCHAR(MAX) or JSON. ` +
+    `Existing json column is ` +
+      `${formatColumnType(dataType, charLength)}, which cannot ` +
+      `safely hold serialised FHIR resources. Expected BLOB or JSON. ` +
       `Alter or drop the column before loading.`,
   );
 }
 
 /**
- * Build a warning for an existing table whose json column type differs from the
- * requested type.
+ * Build a warning for an existing table whose json column type differs from
+ * the requested type (data-model.md lifecycle: warn naming both types and
+ * load into the existing table unchanged).
  *
  * @param schemaName - Schema name.
  * @param tableName - Table name.
@@ -134,7 +173,7 @@ export function resolveColumnJsonDataType(
  * @returns A warning message naming both types, or null when they match.
  */
 export function buildJsonTypeMismatchWarning(
-  schemaName: string,
+  schemaName: string | undefined,
   tableName: string,
   existingType: ResourceJsonDataType,
   requestedType: ResourceJsonDataType,
@@ -142,91 +181,160 @@ export function buildJsonTypeMismatchWarning(
   if (existingType === requestedType) {
     return null;
   }
+  const qualified = qualifyTableName(schemaName, tableName);
   return (
-    `Warning: table [${schemaName}].[${tableName}] already exists with a json ` +
+    `Warning: table ${qualified} already exists with a json ` +
     `column of type ${existingType}, but ${requestedType} was requested. The ` +
     `existing table is left unaltered and loading continues into it.`
   );
 }
 
 /**
+ * Fail fast when native JSON storage is requested from a pre-21c database
+ * (FR-014, data-model.md lifecycle).
+ *
+ * @param serverVersion - The database's `oracleServerVersion` (e.g.
+ *   1900000000 for 19c).
+ * @throws Error naming the required version and the server's version.
+ */
+export function assertNativeJsonSupported(serverVersion: number): void {
+  const majorVersion = Math.floor(serverVersion / 100_000_000);
+  if (majorVersion >= NATIVE_JSON_MAJOR_VERSION) {
+    return;
+  }
+  throw new Error(
+    `Native JSON storage requires Oracle Database 21c or later; ` +
+      `this server is version ${majorVersion}. ` +
+      `Use BLOB storage (the default) or upgrade the database.`,
+  );
+}
+
+/**
+ * Validate identifiers to prevent SQL injection before they are interpolated
+ * into DDL. The json type is already a canonical, allowlisted value, so it
+ * carries no injection risk.
+ *
+ * @param schemaName - Schema name, when given.
+ * @param tableName - Table name.
+ */
+function validateIdentifiers(
+  schemaName: string | undefined,
+  tableName: string,
+): void {
+  if (schemaName !== undefined) {
+    validateOracleIdentifier(schemaName, "Schema name");
+  }
+  validateOracleIdentifier(tableName, "Table name");
+}
+
+/**
  * Check if a table exists in the database.
  *
  * @param pool - Database connection pool.
- * @param schemaName - Schema name.
+ * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to check.
  * @returns Promise that resolves to true if the table exists.
  */
 export async function tableExists(
-  pool: ConnectionPool,
-  schemaName: string,
+  pool: oracledb.Pool,
+  schemaName: string | undefined,
   tableName: string,
 ): Promise<boolean> {
-  const result = await pool
-    .request()
-    .input("schemaName", sql.NVarChar, schemaName)
-    .input("tableName", sql.NVarChar, tableName).query(`
-      SELECT COUNT(*) as count
-      FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_SCHEMA = @schemaName AND TABLE_NAME = @tableName
-    `);
-
-  return result.recordset[0].count > 0;
+  const connection = await pool.getConnection();
+  try {
+    if (schemaName === undefined) {
+      const result = await connection.execute(
+        `SELECT COUNT(*) AS n
+         FROM user_tables
+         WHERE table_name = :tableName`,
+        [tableName.toUpperCase()],
+      );
+      const row = result.rows?.[0] as { N: number } | undefined;
+      return (row?.N ?? 0) > 0;
+    }
+    const result = await connection.execute(
+      `SELECT COUNT(*) AS n
+       FROM all_tables
+       WHERE owner = :owner AND table_name = :tableName`,
+      [schemaName.toUpperCase(), tableName.toUpperCase()],
+    );
+    const row = result.rows?.[0] as { N: number } | undefined;
+    return (row?.N ?? 0) > 0;
+  } finally {
+    await connection.close();
+  }
 }
 
 /**
  * Read the effective json column type for an existing table.
  *
  * @param pool - Database connection pool.
- * @param schemaName - Schema name.
+ * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.
  * @returns The canonical json column type, or null if the table or its `json`
  *   column does not exist.
- * @throws Error if the column exists but is neither native `JSON` nor
- *   `NVARCHAR(MAX)` (see {@link resolveColumnJsonDataType}).
+ * @throws Error if the column exists but is neither the BLOB variant nor
+ *   native `JSON` (see {@link resolveColumnJsonDataType}).
  */
 export async function getExistingJsonColumnType(
-  pool: ConnectionPool,
-  schemaName: string,
+  pool: oracledb.Pool,
+  schemaName: string | undefined,
   tableName: string,
 ): Promise<ResourceJsonDataType | null> {
-  const result = await pool
-    .request()
-    .input("schemaName", sql.NVarChar, schemaName)
-    .input("tableName", sql.NVarChar, tableName).query(`
-      SELECT DATA_TYPE, CHARACTER_MAXIMUM_LENGTH
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = @schemaName
-        AND TABLE_NAME = @tableName
-        AND COLUMN_NAME = 'json'
-    `);
+  const connection = await pool.getConnection();
+  try {
+    let result: oracledb.Result<unknown>;
+    if (schemaName === undefined) {
+      result = await connection.execute(
+        `SELECT data_type, char_length
+         FROM user_tab_columns
+         WHERE table_name = :tableName AND column_name = 'JSON'`,
+        [tableName.toUpperCase()],
+      );
+    } else {
+      result = await connection.execute(
+        `SELECT data_type, char_length
+         FROM all_tab_columns
+         WHERE owner = :owner AND table_name = :tableName
+           AND column_name = 'JSON'`,
+        [schemaName.toUpperCase(), tableName.toUpperCase()],
+      );
+    }
 
-  const row = result.recordset[0];
-  if (!row) {
-    return null;
+    const row = result.rows?.[0] as
+      | { DATA_TYPE: string; CHAR_LENGTH: number }
+      | undefined;
+    if (!row) {
+      return null;
+    }
+    return resolveColumnJsonDataType(
+      row.DATA_TYPE,
+      row.CHAR_LENGTH > 0 ? row.CHAR_LENGTH : null,
+    );
+  } finally {
+    await connection.close();
   }
-  return resolveColumnJsonDataType(row.DATA_TYPE, row.CHARACTER_MAXIMUM_LENGTH);
 }
 
 /**
  * Emit a warning if an existing table's json column type differs from the
  * requested type. The table is never altered; this only surfaces the mismatch
- * so it is visible rather than silently ignored (FR-008, SC-005).
+ * so it is visible rather than silently ignored.
  *
- * An existing column that is neither native `JSON` nor `NVARCHAR(MAX)` cannot
- * hold a serialised FHIR resource, so it is rejected outright rather than
- * warned about: the error is raised here before any rows are loaded.
+ * An existing column that is neither the BLOB variant nor native `JSON`
+ * cannot hold a serialised FHIR resource, so it is rejected outright rather
+ * than warned about: the error is raised here before any rows are loaded.
  *
  * @param pool - Database connection pool.
- * @param schemaName - Schema name.
+ * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.
  * @param requestedType - The requested json column type.
- * @throws Error if the existing `json` column is neither native `JSON` nor
- *   `NVARCHAR(MAX)` (see {@link resolveColumnJsonDataType}).
+ * @throws Error if the existing `json` column is neither the BLOB variant nor
+ *   native `JSON` (see {@link resolveColumnJsonDataType}).
  */
 export async function warnIfJsonTypeMismatch(
-  pool: ConnectionPool,
-  schemaName: string,
+  pool: oracledb.Pool,
+  schemaName: string | undefined,
   tableName: string,
   requestedType: ResourceJsonDataType,
 ): Promise<void> {
@@ -246,91 +354,149 @@ export async function warnIfJsonTypeMismatch(
   );
   if (warning !== null) {
     // The warning is emitted regardless of quiet mode so the misconfiguration
-    // is always visible (SC-005).
+    // is always visible.
     console.warn(warning);
   }
 }
 
 /**
- * Create the fhir_resources table with an index on resource_type.
- * Table schema: id (INT IDENTITY PRIMARY KEY), resource_type (NVARCHAR(64)),
- * json (the configured storage type, NVARCHAR(MAX) by default).
+ * Fail fast when native JSON storage is requested but the database does not
+ * support it (FR-014). Reads the server version from a pooled connection.
  *
  * @param pool - Database connection pool.
- * @param schemaName - Schema name.
+ * @throws Error when the server is pre-21c; see {@link
+ *   assertNativeJsonSupported}.
+ */
+export async function ensureNativeJsonSupported(
+  pool: oracledb.Pool,
+): Promise<void> {
+  const connection = await pool.getConnection();
+  try {
+    assertNativeJsonSupported(connection.oracleServerVersion);
+  } finally {
+    await connection.close();
+  }
+}
+
+/**
+ * Create the resources table with an index on resource_type (DDL per
+ * data-model.md).
+ *
+ * @param pool - Database connection pool.
+ * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to create.
- * @param jsonType - Storage type for the `json` column (default `NVARCHAR(MAX)`).
+ * @param jsonType - Storage type for the `json` column.
  */
 export async function createTable(
-  pool: ConnectionPool,
-  schemaName: string,
+  pool: oracledb.Pool,
+  schemaName: string | undefined,
   tableName: string,
-  jsonType: ResourceJsonDataType = "NVARCHAR(MAX)",
+  jsonType: ResourceJsonDataType = "BLOB",
 ): Promise<void> {
-  // Validate identifiers to prevent SQL injection. The json type is already a
-  // canonical, allowlisted value, so it carries no injection risk.
-  validateSqlServerIdentifier(schemaName, "Schema name");
-  validateSqlServerIdentifier(tableName, "Table name");
+  validateIdentifiers(schemaName, tableName);
 
   const { createTable: createTableSql, createIndex: createIndexSql } =
     buildCreateTableStatements(schemaName, tableName, jsonType);
 
-  // Create the table.
-  await pool.request().query(createTableSql);
+  const connection = await pool.getConnection();
+  try {
+    // Create the table.
+    await connection.execute(createTableSql);
 
-  // Create an index on resource_type for efficient filtering by resource type.
-  await pool.request().query(createIndexSql);
+    // Create an index on resource_type for efficient filtering by resource
+    // type.
+    await connection.execute(createIndexSql);
+  } finally {
+    await connection.close();
+  }
 }
 
 /**
  * Truncate a table (remove all rows).
  *
  * @param pool - Database connection pool.
- * @param schemaName - Schema name.
+ * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to truncate.
  */
 export async function truncateTable(
-  pool: ConnectionPool,
-  schemaName: string,
+  pool: oracledb.Pool,
+  schemaName: string | undefined,
   tableName: string,
 ): Promise<void> {
-  // Validate identifiers to prevent SQL injection
-  validateSqlServerIdentifier(schemaName, "Schema name");
-  validateSqlServerIdentifier(tableName, "Table name");
+  validateIdentifiers(schemaName, tableName);
 
-  await pool.request().query(`TRUNCATE TABLE [${schemaName}].[${tableName}]`);
+  const connection = await pool.getConnection();
+  try {
+    await connection.execute(
+      `TRUNCATE TABLE ${qualifyTableName(schemaName, tableName)}`,
+    );
+  } finally {
+    await connection.close();
+  }
 }
 
 /**
- * Ensure the fhir_resources table exists, creating it if necessary.
+ * Ensure the resources table exists, creating it if necessary, and return the
+ * storage type the loader must use for its binds.
  *
  * When the table already exists it is never altered; the requested `json`
- * column type only governs creation of a new table.
+ * column type only governs creation of a new table. An existing table with the
+ * other supported storage type yields a warning naming both types, and the
+ * *existing* column type is returned so rows are bound in a form the column
+ * accepts. The native-JSON version gate (FR-014) fires only when a new table
+ * would actually be created as JSON.
  *
  * @param pool - Database connection pool.
- * @param schemaName - Schema name.
+ * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.
  * @param truncate - Whether to truncate the table if it exists.
- * @param jsonType - Storage type for the `json` column when creating the table
- *   (default `NVARCHAR(MAX)`).
+ * @param jsonType - Storage type for the `json` column when creating the
+ *   table.
+ * @returns The effective json column storage type to load with.
  */
 export async function ensureTable(
-  pool: ConnectionPool,
-  schemaName: string,
+  pool: oracledb.Pool,
+  schemaName: string | undefined,
   tableName: string,
   truncate: boolean = false,
-  jsonType: ResourceJsonDataType = "NVARCHAR(MAX)",
-): Promise<void> {
+  jsonType: ResourceJsonDataType = "BLOB",
+): Promise<ResourceJsonDataType> {
   const exists = await tableExists(pool, schemaName, tableName);
 
   if (exists) {
-    // The table already exists, so the requested type cannot take effect. Warn
-    // if it differs from the existing column type, then leave the table as is.
-    await warnIfJsonTypeMismatch(pool, schemaName, tableName, jsonType);
+    // The table already exists, so the requested type cannot take effect.
+    // getExistingJsonColumnType rejects an unusable column outright; a
+    // supported column of the other variant only warns.
+    const existingType = await getExistingJsonColumnType(
+      pool,
+      schemaName,
+      tableName,
+    );
+    if (existingType === null) {
+      throw new Error(
+        `Existing table ${qualifyTableName(schemaName, tableName)} has no json column.`,
+      );
+    }
+    const warning = buildJsonTypeMismatchWarning(
+      schemaName,
+      tableName,
+      existingType,
+      jsonType,
+    );
+    if (warning !== null) {
+      console.warn(warning);
+    }
     if (truncate) {
       await truncateTable(pool, schemaName, tableName);
     }
-  } else {
-    await createTable(pool, schemaName, tableName, jsonType);
+    return existingType;
   }
+
+  // Fail fast before any DDL when native JSON is requested from a pre-21c
+  // server (FR-014, data-model.md lifecycle).
+  if (jsonType === "JSON") {
+    await ensureNativeJsonSupported(pool);
+  }
+  await createTable(pool, schemaName, tableName, jsonType);
+  return jsonType;
 }
