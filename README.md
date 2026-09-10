@@ -200,7 +200,10 @@ names (case included) are preserved.
   indistinguishable from an absent element.
 - **Storage-specific SQL.** Generated SQL targets one storage type: `BLOB`
   mode emits `FORMAT JSON` after the JSON column reference; native `JSON`
-  mode omits it. Changing storage type requires retranspiling.
+  mode omits it there, but both modes emit `CLOB FORMAT JSON` on `JSON_TABLE`
+  value columns (the column is character data, so it must be marked as JSON
+  regardless of the storage type). Changing storage type requires
+  retranspiling.
 - **Version requirements.** Default `BLOB` storage works on Oracle 19c and
   later. Native `JSON` storage requires 21c or later; requesting it against an
   older database fails fast, naming the required version.
