@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     http://www.apache.org/licenses/LICENSE-2.0
+ *     https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,7 +20,7 @@
 import eslint from "@eslint/js";
 import vitest from "@vitest/eslint-plugin";
 import importPlugin from "eslint-plugin-import";
-import jsdoc from "eslint-plugin-jsdoc";
+import jsdocPlugin from "eslint-plugin-jsdoc";
 import unicorn from "eslint-plugin-unicorn";
 import tseslint from "typescript-eslint";
 
@@ -41,12 +41,13 @@ export default tseslint.config(
 
   eslint.configs.recommended,
   ...tseslint.configs.recommendedTypeChecked,
-  jsdoc.configs["flat/recommended-typescript"],
+  jsdocPlugin.configs["flat/recommended-typescript"],
   importPlugin.flatConfigs.recommended,
   importPlugin.flatConfigs.typescript,
   unicorn.configs.recommended,
 
-  // Type-aware parsing for every TypeScript file.
+  // Type-aware parsing for every TypeScript file, plus project-wide rule
+  // adjustments.
   {
     languageOptions: {
       parserOptions: {
@@ -59,6 +60,16 @@ export default tseslint.config(
         typescript: { alwaysTryTypes: true },
         node: true,
       },
+    },
+    rules: {
+      // Unicorn adjustments: ported modules keep PascalCase filenames (see
+      // plan.md Constitution Check) and SQL/JSON handling uses null.
+      "unicorn/filename-case": [
+        "error",
+        { cases: { camelCase: true, pascalCase: true } },
+      ],
+      "unicorn/prevent-abbreviations": "off",
+      "unicorn/no-null": "off",
     },
   },
 
@@ -145,15 +156,6 @@ export default tseslint.config(
       ],
       "import/no-duplicates": "error",
 
-      // Unicorn adjustments: ported modules keep PascalCase filenames (see
-      // plan.md Constitution Check) and SQL/JSON handling uses null.
-      "unicorn/filename-case": [
-        "error",
-        { cases: { camelCase: true, pascalCase: true } },
-      ],
-      "unicorn/prevent-abbreviations": "off",
-      "unicorn/no-null": "off",
-
       // Code quality and safety rules for healthcare data.
       complexity: ["error", 10],
       "max-depth": ["error", 4],
@@ -189,6 +191,9 @@ export default tseslint.config(
     files: ["*.config.ts", "*.config.mjs"],
     rules: {
       "jsdoc/require-jsdoc": "off",
+      // Plugins ship mixed CJS/ESM entry points; default imports are intended.
+      "import/no-named-as-default": "off",
+      "import/no-named-as-default-member": "off",
     },
   },
 );
