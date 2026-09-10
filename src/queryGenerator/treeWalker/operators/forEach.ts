@@ -245,13 +245,16 @@ function buildSimpleApply(
   transpilerCtx: TranspilerContext,
 ): string {
   const storage = transpilerCtx.resourceJsonDataType ?? "BLOB";
-  const columns = jsonTableColumns(storage);
+  const columns = jsonTableColumns();
   const fmt = formatJsonSuffix(storage);
-  const indexedPath = useFirst
-    ? `${path}[0]`
-    : arrayIndex === null
-      ? path
-      : `${path}[${arrayIndex}]`;
+  let indexedPath: string;
+  if (useFirst) {
+    indexedPath = `${path}[0]`;
+  } else if (arrayIndex === null) {
+    indexedPath = path;
+  } else {
+    indexedPath = `${path}[${arrayIndex}]`;
+  }
 
   const jsonTable = isJsonTableColumn(source)
     ? `JSON_TABLE(JSON_QUERY(${source}${fmt}, '$.${indexedPath}' RETURNING CLOB), '$[*]' COLUMNS (${columns}))`
@@ -302,7 +305,7 @@ function buildNestedApply(
       pathParser.parseSegmentIndexing(segment);
 
     const wrap = isJsonTableColumn(currentSource);
-    const columns = jsonTableColumns(storage);
+    const columns = jsonTableColumns();
     const segmentPath =
       segmentIndex === null
         ? `$.${cleanSegment}`

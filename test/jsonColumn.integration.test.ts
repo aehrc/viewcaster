@@ -30,8 +30,8 @@
  * the local 23ai container (BLOB and native JSON).
  */
 
-import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 import oracledb from "oracledb";
+import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
 
 import {
   createLoaderIntegrationHarness,

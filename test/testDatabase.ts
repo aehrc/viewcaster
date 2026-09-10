@@ -27,10 +27,7 @@
  * dataset on a shared development instance is never touched.
  */
 
-import {
-  LosslessNumber,
-  stringify as losslessStringify,
-} from "lossless-json";
+import { LosslessNumber, stringify as losslessStringify } from "lossless-json";
 import oracledb from "oracledb";
 
 /**
@@ -175,7 +172,7 @@ export async function dropTestTable(
  */
 function toPlainJson(value: unknown): unknown {
   if (value instanceof LosslessNumber) return Number(value.value);
-  if (Array.isArray(value)) return value.map(toPlainJson);
+  if (Array.isArray(value)) return value.map((entry) => toPlainJson(entry));
   if (value !== null && typeof value === "object") {
     return Object.fromEntries(
       Object.entries(value as Record<string, unknown>).map(([key, entry]) => [

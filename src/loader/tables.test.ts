@@ -247,38 +247,38 @@ describe("tableExists and getExistingJsonColumnType", () => {
    * @returns The pool stub and the captured options.
    */
   function fakePool(rows: unknown[]): {
-    pool: { getConnection: () => Promise<unknown> };
+    pool: oracledb.Pool;
     capturedOptions: unknown[];
   } {
     const capturedOptions: unknown[] = [];
     const connection = {
-      execute: async (
+      execute: (
         _sql: string,
         _binds?: unknown,
         options?: unknown,
-      ) => {
+      ): Promise<{ rows: unknown[] }> => {
         capturedOptions.push(options);
-        return { rows };
+        return Promise.resolve({ rows });
       },
-      close: async () => undefined,
+      close: (): Promise<void> => Promise.resolve(),
     };
-    return {
-      pool: { getConnection: async () => connection } as never,
-      capturedOptions,
+    const pool = {
+      getConnection: (): Promise<unknown> => Promise.resolve(connection),
     };
+    return { pool: pool as unknown as oracledb.Pool, capturedOptions };
   }
 
   it("tableExists reads rows as objects even without a global outFormat", async () => {
     const { pool, capturedOptions } = fakePool([{ N: 1 }]);
-    await expect(tableExists(pool as never, undefined, "T")).resolves.toBe(true);
-    expect(capturedOptions).toEqual([{ outFormat: oracledb.OUT_FORMAT_OBJECT }]);
+    await expect(tableExists(pool, undefined, "T")).resolves.toBe(true);
+    expect(capturedOptions).toEqual([
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    ]);
   });
 
   it("tableExists reports absent tables through the same row shape", async () => {
     const { pool } = fakePool([{ N: 0 }]);
-    await expect(tableExists(pool as never, undefined, "nope")).resolves.toBe(
-      false,
-    );
+    await expect(tableExists(pool, undefined, "nope")).resolves.toBe(false);
   });
 
   it("getExistingJsonColumnType reads column rows as objects", async () => {
@@ -286,8 +286,10 @@ describe("tableExists and getExistingJsonColumnType", () => {
       { DATA_TYPE: "BLOB", CHAR_LENGTH: 0 },
     ]);
     await expect(
-      getExistingJsonColumnType(pool as never, undefined, "fhir_resources"),
+      getExistingJsonColumnType(pool, undefined, "fhir_resources"),
     ).resolves.toBe("BLOB");
-    expect(capturedOptions).toEqual([{ outFormat: oracledb.OUT_FORMAT_OBJECT }]);
+    expect(capturedOptions).toEqual([
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
+    ]);
   });
 });
