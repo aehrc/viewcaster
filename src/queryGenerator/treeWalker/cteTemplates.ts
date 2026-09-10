@@ -75,7 +75,7 @@ export function buildRepeatCte(args: BuildRepeatCteArgs): CteDefinition {
 ${recBlocks.join("\n  UNION ALL\n")}`;
   const columnList = args.partitionKeys
     .map((k) => k.name)
-    .concat("elem_path", "elem_order", "item_json", "item_scalar", "cyc", "depth")
+    .concat("elem_path", "elem_order", "item_json", "item_scalar", "depth")
     .join(", ");
   const cycleClause = `CYCLE ${args.partitionKeys
     .map((k) => k.name)
@@ -105,7 +105,6 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
     ${orderSegment(chain.lastAlias)} AS elem_order,
     ${chain.lastAlias}.value AS item_json,
     ${chain.lastAlias}.scalar AS item_scalar,
-    '0' AS cyc,
     0 AS depth
   ${fromClause}${ancestorApplies}
   ${chain.applyClauses}${wherePart}`;
@@ -130,7 +129,6 @@ function buildRecursiveMember(
     cte.elem_order || '.' || ${orderSegment(chain.lastAlias)} AS elem_order,
     ${chain.lastAlias}.value AS item_json,
     ${chain.lastAlias}.scalar AS item_scalar,
-    '0' AS cyc,
     cte.depth + 1
   FROM ${cteAlias} cte
   ${chain.applyClauses}`;
