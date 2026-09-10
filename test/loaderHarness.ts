@@ -47,6 +47,11 @@ import type {
   LoadResult,
 } from "../src/loader/types.js";
 
+// Rows are returned as objects and BLOB columns as Buffers, so result rows
+// can be asserted on directly.
+oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+oracledb.fetchAsBuffer = [oracledb.BLOB];
+
 /** A small, representative set of FHIR resources used by the integration tests. */
 export const SAMPLE_PATIENTS = [
   { resourceType: "Patient", id: "p1", active: true, name: "Café Ünïcode 🩺" },
@@ -86,7 +91,7 @@ export interface LoaderIntegrationHarness {
   /** Load the sample patients into a table, returning the load result. */
   loadSample(
     tableName: string,
-    options?: { resourceJsonDataType?: "BLOB" | "JSON"; truncate?: boolean },
+    options?: { resourceJsonDataType?: string; truncate?: boolean },
   ): Promise<LoadResult>;
   /** Read the effective type of a table's json column. */
   getJsonColumnType(tableName: string): Promise<JsonColumnType | undefined>;
@@ -140,12 +145,17 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
       rmSync(dir, { recursive: true, force: true });
     }
     if (pool) {
-      for (const tableName of createdTables) {
-        try {
-          await pool.execute(`DROP TABLE ${tableName} PURGE`);
-        } catch {
-          // Best-effort cleanup; ignore failures.
+      const connection = await pool.getConnection();
+      try {
+        for (const tableName of createdTables) {
+          try {
+            await connection.execute(`DROP TABLE ${tableName} PURGE`);
+          } catch {
+            // Best-effort cleanup; ignore failures.
+          }
         }
+      } finally {
+        await connection.close();
       }
       await closeConnectionPool(pool);
       pool = null;
@@ -182,7 +192,7 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
 
   async function loadSample(
     tableName: string,
-    options?: { resourceJsonDataType?: "BLOB" | "JSON"; truncate?: boolean },
+    options?: { resourceJsonDataType?: string; truncate?: boolean },
   ): Promise<LoadResult> {
     return loadNdjsonFiles({
       directory: writeNdjsonDir({
@@ -243,12 +253,15 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
   }
 
   async function dropTable(tableName: string): Promise<void> {
+    const connection = await requirePool().getConnection();
     try {
-      await requirePool().execute(`DROP TABLE ${tableName} PURGE`);
+      await connection.execute(`DROP TABLE ${tableName} PURGE`);
     } catch (error) {
       if (!(error instanceof Error && error.message.includes("ORA-00942"))) {
         throw error;
       }
+    } finally {
+      await connection.close();
     }
   }
 

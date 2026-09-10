@@ -1,0 +1,2 @@
+{"resourceType":"Patient","id":"pat-1","active":true,"name":[{"family":"Nguyen","given":["Thuy"]}],"gender":"female","birthDate":"1990-03-14"}
+{"resourceType":"Patient","id":"pat-2","active":false,"name":[{"family":"O'Brien","given":["Sean"]}],"birthDate":"1975-11-02"}

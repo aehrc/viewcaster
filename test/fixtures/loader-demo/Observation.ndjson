@@ -1,0 +1,2 @@
+{"resourceType":"Observation","id":"obs-1","status":"final","code":{"coding":[{"system":"http://loinc.org","code":"8867-4"}]},"valueInteger":72}
+{"resourceType":"Observation","id":"obs-2","status":"preliminary","code":{"coding":[{"system":"http://loinc.org","code":"8480-6"}]},"valueQuantity":{"value":120.5,"unit":"mmHg"}}

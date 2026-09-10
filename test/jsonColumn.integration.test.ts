@@ -74,12 +74,10 @@ describe("loadNdjsonFiles json column type (US2)", () => {
 
     const connection = await harness.pool().getConnection();
     try {
-      const queryResult = await connection.execute(
-        `SELECT json FROM ${tableName} ORDER BY id`,
-      );
-      const blobs = queryResult.rows?.map(
-        (row: { JSON: Buffer }) => row.JSON,
-      ) as Buffer[];
+      const queryResult = await connection.execute<{
+        JSON: Buffer;
+      }>(`SELECT json FROM ${tableName} ORDER BY id`);
+      const blobs = queryResult.rows?.map((row) => row.JSON) ?? [];
       expect(blobs).toHaveLength(2);
       expect(blobs[0].toString("utf-8")).toBe(JSON.stringify(resources[0]));
       expect(blobs[1].toString("utf-8")).toBe(JSON.stringify(resources[1]));
@@ -108,10 +106,10 @@ describe("loadNdjsonFiles json column type (US2)", () => {
     // Value round-trip: the resource is readable through the native type.
     const connection = await harness.pool().getConnection();
     try {
-      const queryResult = await connection.execute(
+      const queryResult = await connection.execute<{ ID: string }>(
         `SELECT JSON_VALUE(json, '$.id') AS id FROM ${tableName} ORDER BY id`,
       );
-      const ids = queryResult.rows?.map((row: { ID: string }) => row.ID);
+      const ids = queryResult.rows?.map((row) => row.ID) ?? [];
       expect(ids).toEqual(["p1", "p2", "p3"]);
     } finally {
       await connection.close();
@@ -173,11 +171,16 @@ describe("loadNdjsonFiles existing json column lifecycle (data-model.md)", () =>
     // target. The loader must reject it before writing any rows, naming the
     // offending column type.
     const tableName = harness.makeTableName();
-    await harness.pool().execute(`CREATE TABLE ${tableName} (
-      id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
-      resource_type VARCHAR2(64) NOT NULL,
-      json CLOB NOT NULL
-    )`);
+    const connection = await harness.pool().getConnection();
+    try {
+      await connection.execute(`CREATE TABLE ${tableName} (
+        id NUMBER GENERATED ALWAYS AS IDENTITY PRIMARY KEY,
+        resource_type VARCHAR2(64) NOT NULL,
+        json CLOB NOT NULL
+      )`);
+    } finally {
+      await connection.close();
+    }
 
     await expect(harness.loadSample(tableName)).rejects.toThrow(/CLOB/);
 

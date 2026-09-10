@@ -23,11 +23,7 @@
   "exclude": [
     "node_modules",
     "dist",
-    // Ported sof-mssql modules that still depend on the mssql driver. Each is
-    // re-included as it is ported to Oracle (tasks T015-T032).
-    "src/loader/**",
-    "src/tests/**",
-    "src/load.ts",
-    "src/cli.ts"
+    // Old mssql-era test modules not yet ported; re-included by Phase 3/5.
+    "src/tests/**"
   ]
 }

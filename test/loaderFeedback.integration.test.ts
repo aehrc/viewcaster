@@ -394,7 +394,7 @@ describe("empty input (US2)", () => {
     const spies = silence();
     try {
       const directory = harness.writeNdjsonDir({
-        "README.md": "no data here",
+        "README.md": ["no data here"],
       });
       const result = await harness.loadDir(directory, tableName);
       expect(result.totalRows).toBe(0);
