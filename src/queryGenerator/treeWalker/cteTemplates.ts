@@ -97,6 +97,7 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
     CAST(${chain.lastAlias}.idx AS VARCHAR2(4000)) AS __path,
     ${orderSegment(chain.lastAlias)} AS __order,
     ${chain.lastAlias}.value AS item_json,
+    ${chain.lastAlias}.scalar AS item_scalar,
     0 AS depth
   ${fromClause}${ancestorApplies}
   ${chain.applyClauses}${wherePart}`;
@@ -179,9 +180,10 @@ function buildJsonTableChain(
   storage: "BLOB" | "JSON",
 ): { applyClauses: string; lastAlias: string } {
   const segments = path.split(".");
+  const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
   if (segments.length === 1) {
     return {
-      applyClauses: `CROSS APPLY JSON_TABLE(${source}, '$.${segments[0]}[*]' COLUMNS (${jsonTableColumns(storage)})) ${finalAlias}`,
+      applyClauses: `CROSS APPLY JSON_TABLE(${source}${fmt}, '$.${segments[0]}[*]' COLUMNS (${jsonTableColumns(storage)})) ${finalAlias}`,
       lastAlias: finalAlias,
     };
   }
@@ -194,7 +196,7 @@ function buildJsonTableChain(
     if (i > 0) chain += "\n  ";
     const columns = jsonTableColumns(storage);
     const tableInput = i === 0
-      ? currentSource
+      ? `${currentSource}${fmt}`
       : `JSON_QUERY(${currentSource} RETURNING CLOB)`;
     chain += `CROSS APPLY JSON_TABLE(${tableInput}, '$.${segments[i]}[*]' COLUMNS (${columns})) ${alias}`;
     currentSource = `${alias}.value`;
