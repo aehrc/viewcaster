@@ -24,7 +24,7 @@
  * the pure configuration logic without opening a database connection.
  */
 
-import { afterEach, describe, expect, it, vi } from "vitest";
+import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { buildConnectString, getDatabaseConfigFromEnv } from "./connection.js";
 
@@ -62,6 +62,34 @@ describe("buildConnectString", () => {
 });
 
 describe("getDatabaseConfigFromEnv", () => {
+  // The environment variables this configuration reads. Cleared before each
+  // test so the assertions observe only what they set themselves, regardless
+  // of the environment the suite runs in, and restored afterwards.
+  const oracleEnvNames = [
+    "ORACLE_HOST",
+    "ORACLE_PORT",
+    "ORACLE_SERVICE_NAME",
+    "ORACLE_USER",
+    "ORACLE_PASSWORD",
+    "ORACLE_CONNECT_STRING",
+    "ORACLE_RESOURCE_JSON_DATA_TYPE",
+  ];
+  let savedEnv: Record<string, string | undefined>;
+
+  beforeEach(() => {
+    savedEnv = Object.fromEntries(
+      oracleEnvNames.map((name) => [name, process.env[name]]),
+    );
+    for (const name of oracleEnvNames) delete process.env[name];
+  });
+
+  afterEach(() => {
+    for (const [name, value] of Object.entries(savedEnv)) {
+      if (value === undefined) delete process.env[name];
+      else process.env[name] = value;
+    }
+  });
+
   it("falls back to ORACLE_* environment variables", () => {
     vi.stubEnv("ORACLE_HOST", "envhost.example.com");
     vi.stubEnv("ORACLE_PORT", "1522");
