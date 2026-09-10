@@ -179,7 +179,7 @@ describe("tree walker Oracle emission", () => {
     expect(sql).toContain(
       "JSON_VALUE(value FORMAT JSON, '$.system' RETURNING VARCHAR2(4000)) = 'phone'",
     );
-    expect(sql).toContain("WHERE 1 = 0") === false;
+    expect(sql).not.toContain("WHERE 1 = 0");
   });
 
   it("resolves ViewDefinition constants referenced with %name", () => {
