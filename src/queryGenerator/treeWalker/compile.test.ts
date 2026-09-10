@@ -93,6 +93,34 @@ describe("tree walker Oracle emission", () => {
     );
   });
 
+  it("wraps chained extension() subqueries in JSON_QUERY (ORA-40556)", () => {
+    const sql = transpile({
+      resource: "Patient",
+      status: "active",
+      select: [
+        {
+          column: [
+            {
+              name: "race_code",
+              path:
+                "extension('http://hl7.org/fhir/us/core/StructureDefinition/us-core-race').extension('ombCategory').value.ofType(Coding).code.first()",
+              type: "code",
+            },
+          ],
+        },
+      ],
+    });
+    // The outer JSON_TABLE must not consume the inner JSON_TABLE's output
+    // directly: the matched extension's extension array is extracted with
+    // JSON_QUERY inside the subquery and iterated at the top level.
+    expect(sql).toContain(
+      "FROM JSON_TABLE((SELECT JSON_QUERY(value, '$.extension' RETURNING CLOB) FROM JSON_TABLE(r.json FORMAT JSON, '$.extension[*]'",
+    );
+    expect(sql).toContain(
+      "JSON_VALUE(value FORMAT JSON, '$.valueCoding.code' RETURNING VARCHAR2(4000))",
+    );
+  });
+
   it("resolves %rowIndex to the FOR ORDINALITY column minus one", () => {
     const sql = transpile({
       resource: "Patient",

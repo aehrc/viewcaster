@@ -1985,6 +1985,17 @@ export class FHIRPathToOracleVisitor
     const base = this.context.iterationContext ?? this.rootJson;
     const fmt = formatJsonSuffix(this.storage);
 
+    // A JSON_TABLE cannot consume the output of another JSON_TABLE
+    // (ORA-40556). When the source is an extension()/where() scalar subquery
+    // over JSON_TABLE (a chained .extension() call), the nested extension
+    // array is extracted with JSON_QUERY inside that subquery and the outer
+    // JSON_TABLE iterates the elements of the extracted array.
+    if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
+      const fromPart = base.slice(Math.max(0, base.indexOf(" FROM ")));
+      const nestedSource = `(SELECT JSON_QUERY(value, '$.extension' RETURNING CLOB)${fromPart}`;
+      return `(SELECT value FROM JSON_TABLE(${nestedSource}${fmt}, '$[*]' COLUMNS (${jsonTableColumns(this.storage)})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
+    }
+
     // Generate SQL that filters the extension array by URL
     return `(SELECT value FROM JSON_TABLE(${base}${fmt}, '$.extension[*]' COLUMNS (${jsonTableColumns(this.storage)})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
   }
