@@ -1,0 +1,3 @@
+[submodule "sqlonfhir"]
+	path = sqlonfhir
+	url = https://github.com/FHIR/sql-on-fhir.js.git
