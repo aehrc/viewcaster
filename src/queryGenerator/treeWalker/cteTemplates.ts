@@ -27,11 +27,8 @@
  * traversal.
  */
 
-import {
-  type CteDefinition,
-  type PartitionKey,
-} from "./types.js";
 import { jsonTableColumns } from "../../fhirpath/visitor.js";
+import type { CarriedColumn, CteDefinition, PartitionKey } from "./types.js";
 
 export interface BuildRepeatCteArgs {
   cteAlias: string;
@@ -45,7 +42,16 @@ export interface BuildRepeatCteArgs {
   ancestorApplies: string;
   /** Partition keys propagated through anchor and recursive members. */
   partitionKeys: PartitionKey[];
-  /** Resource-level WHERE applied to the anchor (or null to omit). */
+  /**
+   * Spine mode (research R4): the anchor reads an enclosing repeat CTE
+   * (`FROM <baseAlias>`) instead of the resource table. `baseAlias` and the
+   * trace APPLY aliases are the only outer expressions in scope for anchor
+   * projections; partition key expressions referencing anything else are
+   * re-pointed at the base CTE's own projection of that key.
+   */
+  spine?: { baseAlias: string; traceAliases: string[] };
+  /** Ancestor context columns carried through anchor and recursive members. */
+  carried?: CarriedColumn[];
   resourcePredicate: string | null;
   /** The JSON storage type the query targets. */
   storage: "BLOB" | "JSON";
@@ -75,6 +81,7 @@ export function buildRepeatCte(args: BuildRepeatCteArgs): CteDefinition {
 ${recBlock}`;
   const columnList = args.partitionKeys
     .map((k) => k.name)
+    .concat((args.carried ?? []).map((c) => c.name))
     .concat("elem_path", "elem_order", "item_json", "item_scalar", "depth")
     .join(", ");
   const cycleClause = `CYCLE ${args.partitionKeys
@@ -93,9 +100,25 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
     resourcePredicate,
     storage,
   } = args;
-  const projLines = partitionKeys
-    .map((k) => `${k.sqlExpr} AS ${k.name}`)
-    .join(",\n    ");
+  const spine = args.spine;
+  const scopeAliases = spine
+    ? [spine.baseAlias, ...spine.traceAliases]
+    : null;
+  const keyLines = partitionKeys.map((k) => {
+    if (scopeAliases === null || spine === undefined) {
+      return `${k.sqlExpr} AS ${k.name}`;
+    }
+    const lead = /^([A-Za-z0-9_]+)\./.exec(k.sqlExpr)?.[1];
+    const inScope = lead !== undefined && scopeAliases.includes(lead);
+    // A key defined above the spine (e.g. the resource `id`) re-points at the
+    // base CTE's own projection of that key; keys defined at the base or at a
+    // trace APPLY level are already in anchor scope.
+    return `${inScope ? k.sqlExpr : `${spine.baseAlias}.${k.name}`} AS ${k.name}`;
+  });
+  const carriedLines = (args.carried ?? []).map(
+    (c) => `${c.sqlExpr} AS ${c.name}`,
+  );
+  const projLines = [...keyLines, ...carriedLines].join(",\n    ");
   const chain = buildJsonTableChain(source, paths[0], "anchor", storage);
   const wherePart = resourcePredicate ? `\n  ${resourcePredicate}` : "";
 
@@ -113,6 +136,10 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
 function buildRecursiveMember(args: BuildRepeatCteArgs): string {
   const { cteAlias, partitionKeys, storage, paths } = args;
   const head = qualifiedKeyCols("cte", partitionKeys);
+  const carried = (args.carried ?? [])
+    .map((c) => `cte.${c.name}`)
+    .join(", ");
+  const carriedPart = carried ? `,\n    ${carried}` : "";
   const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
   const chains = paths
     .map(
@@ -122,7 +149,7 @@ function buildRecursiveMember(args: BuildRepeatCteArgs): string {
     )
     .join("\n      UNION ALL\n");
   return `  SELECT
-    ${head},
+    ${head}${carriedPart},
     cte.elem_path || '.' || CAST(u.idx AS VARCHAR2(4000)) AS elem_path,
     cte.elem_order || '.' || LPAD(CAST(u.idx AS VARCHAR2(10)), 10, '0') AS elem_order,
     u.v AS item_json,

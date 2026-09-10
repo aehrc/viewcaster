@@ -18,7 +18,12 @@ import {
 import type { ViewDefinitionSelect } from "../../../types.js";
 import type { PathParser } from "../../PathParser.js";
 import { freshAlias } from "../aliasGenerator.js";
-import type { Context, Fragment, PartitionKey } from "../types.js";
+import type {
+  Context,
+  Fragment,
+  PartitionKey,
+  SpineContext,
+} from "../types.js";
 
 interface ForEachDeps {
   pathParser: PathParser;
@@ -83,6 +88,13 @@ export function walkForEach(
   if (inner.kind === "union") {
     return inner;
   }
+  // When the inner sub-tree anchored a spine CTE on an enclosing repeat, this
+  // forEach's APPLY already lives inside that anchor (recorded on the spine
+  // trace); prepending it here would duplicate it and reference the ancestor
+  // repeat CTE at top level (ORA-32036).
+  if (inner.rebase !== undefined) {
+    return inner;
+  }
 
   return {
     ...inner,
@@ -114,12 +126,39 @@ function buildInnerCtx(
     sqlExpr: `${alias}.idx`,
     sqlType: "NUMBER(10)",
   };
+  // Under a spine (nested inside a repeat's iteration context) a nested
+  // repeat folds this APPLY level into its anchor: record the clause on the
+  // trace and the iteration's `value`/`scalar` as carried columns so
+  // enclosing-scope expressions keep resolving after the rebase (the `idx`
+  // identity travels as the `${alias}_idx` partition key).
+  const spine: SpineContext | undefined = ctx.spine
+    ? {
+        baseAlias: ctx.spine.baseAlias,
+        carried: [
+          ...ctx.spine.carried,
+          {
+            name: `${alias}_value`,
+            sqlExpr: `${alias}.value`,
+            sqlType: "CLOB",
+            origin: `${alias}.value`,
+          },
+          {
+            name: `${alias}_scalar`,
+            sqlExpr: `${alias}.scalar`,
+            sqlType: "VARCHAR2(4000)",
+            origin: `${alias}.scalar`,
+          },
+        ],
+        trace: [...ctx.spine.trace, { alias, applyClause }],
+      }
+    : undefined;
   return {
     ...ctx,
     source: `${alias}.value`,
     partitionKeys: [...ctx.partitionKeys, innerKey],
     ancestorApplies: ctx.ancestorApplies + applyClause,
     transpilerCtx: innerTranspilerCtx,
+    spine,
   };
 }
 

@@ -23,10 +23,38 @@
  * Row siblings concatenate normally. When one sibling is a union fragment,
  * every row sibling's columns and FROM extensions are distributed into each
  * union branch (unionAll rows carry the enclosing scope's columns), and the
- * merged result is the union fragment.
+ * merged result is the union fragment. When one sibling is a nested repeat
+ * whose spine CTE anchored on the enclosing repeat CTE, the remaining
+ * siblings are re-pointed onto the spine CTE first (research R4).
  */
 
-import type { Context, Fragment } from "./types.js";
+import type { Context, Fragment, RebaseInfo } from "./types.js";
+
+/**
+ * Applies ordered identifier-boundary textual replacements to a SQL string.
+ *
+ * Shared by sibling rewrites and rebase composition: each `from` pattern is
+ * matched with identifier-boundary lookarounds so that e.g. "r.id" never
+ * matches inside a longer identifier.
+ *
+ * @param sql - The SQL text to rewrite.
+ * @param replacements - Ordered from/to pairs.
+ * @returns The rewritten SQL.
+ */
+export function applyTextReplacements(
+  sql: string,
+  replacements: Array<{ from: string; to: string }>,
+): string {
+  let out = sql;
+  for (const { from, to } of replacements) {
+    const escaped = from.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+    out = out.replace(
+      new RegExp(`(?<![A-Za-z0-9_$])${escaped}(?![A-Za-z0-9_$])`, "g"),
+      () => to,
+    );
+  }
+  return out;
+}
 
 /**
  * Merges sibling Fragments produced by walking children of a Group node.
@@ -37,11 +65,17 @@ import type { Context, Fragment } from "./types.js";
  * fragment, the row fragments' columns and extensions are folded into each of
  * the union's branches instead, since each branch is a self-contained SELECT.
  *
+ * When one sibling carries `rebase` (a nested repeat that anchored a spine CTE
+ * on the enclosing repeat), the other siblings are rewritten onto the spine
+ * CTE and the rebase is carried on the merged result so the enclosing repeat
+ * walker can drop its own join.
+ *
  * @param fragments - Ordered array of sibling Fragments to merge.
  * @param ctx - The context of the parent Group node, used to supply
  *   `partitionKeys` for the merged result.
  * @returns A single merged Fragment.
- * @throws When two union fragments appear in the same scope (not supported).
+ * @throws When two union fragments appear in the same scope, or when two
+ *   spine-rebasing repeats appear at the same level (not supported).
  */
 export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
   if (fragments.length === 0) {
@@ -54,18 +88,32 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
     };
   }
 
-  if (fragments.length === 1) return fragments[0];
+  const rebasers = fragments.filter((f) => f.rebase !== undefined);
+  if (rebasers.length > 1) {
+    throw new Error(
+      "Multiple spine repeats anchoring the same enclosing repeat at one select level are not supported",
+    );
+  }
+  const rebase = rebasers[0]?.rebase;
+  const effective = rebase
+    ? fragments.map((f) =>
+        f.rebase !== undefined ? f : rebaseSiblingFragment(f, rebase),
+      )
+    : fragments;
 
-  const rowFragments = fragments.filter((f) => f.kind !== "union");
-  const unionFragments = fragments.filter((f) => f.kind === "union");
+  if (effective.length === 1) return effective[0];
+
+  const rowFragments = effective.filter((f) => f.kind !== "union");
+  const unionFragments = effective.filter((f) => f.kind === "union");
 
   if (unionFragments.length === 0) {
     return {
       kind: "rows",
-      ctes: fragments.flatMap((f) => f.ctes),
-      fromExtensions: fragments.map((f) => f.fromExtensions).join(""),
-      columns: fragments.flatMap((f) => f.columns),
+      ctes: effective.flatMap((f) => f.ctes),
+      fromExtensions: effective.map((f) => f.fromExtensions).join(""),
+      columns: effective.flatMap((f) => f.columns),
       partitionKeys: ctx.partitionKeys,
+      rebase,
     };
   }
 
@@ -88,6 +136,7 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
     fromExtensions: "",
     columns: union.columns,
     partitionKeys: ctx.partitionKeys,
+    rebase,
     branches: (union.branches ?? []).map((branch) => ({
       ...branch,
       ctes: [...rowCtes, ...branch.ctes],
@@ -97,6 +146,48 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
       // entry order.
       fromExtensions: rowFromExtensions + branch.fromExtensions,
       columns: [...branch.columns, ...rowColumns],
+    })),
+  };
+}
+
+/**
+ * Re-points one sibling fragment onto a nested repeat's spine CTE.
+ *
+ * Column expressions are rewritten with the rebase's textual replacements
+ * (ancestor CTE references become spine carried columns); FROM extensions
+ * that reference an out-of-scope ancestor alias are dropped, because the
+ * ancestor rows now surface only through the spine CTE that the rebasing
+ * sibling joins.
+ *
+ * @param fragment - The sibling fragment to rewrite.
+ * @param rebase - The rebase info of the sibling that anchored the spine.
+ * @returns The rewritten fragment.
+ */
+function rebaseSiblingFragment(
+  fragment: Fragment,
+  rebase: RebaseInfo,
+): Fragment {
+  const dropAncestors = (ext: string): string =>
+    ext
+      .split("\n")
+      .filter(
+        (clause) =>
+          clause === "" ||
+          !rebase.ancestorAliases.some((alias) =>
+            new RegExp(`\\b${alias}\\.`).test(clause),
+          ),
+      )
+      .join("\n");
+  return {
+    ...fragment,
+    columns: fragment.columns.map((c) => ({
+      ...c,
+      sqlExpr: applyTextReplacements(c.sqlExpr, rebase.replacements),
+    })),
+    fromExtensions: dropAncestors(fragment.fromExtensions),
+    partitionKeys: fragment.partitionKeys.map((k) => ({
+      ...k,
+      sqlExpr: applyTextReplacements(k.sqlExpr, rebase.replacements),
     })),
   };
 }

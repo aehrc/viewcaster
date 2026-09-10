@@ -99,9 +99,22 @@ export function walkUnionAll(
     .join("");
   const rowColumns = outerFragments.flatMap((f) => f.columns);
 
+  // Branches are self-contained SELECTs joined by top-level UNION ALL, but
+  // Oracle renders one WITH section for the whole compound query. Hoist every
+  // branch's CTE definitions here so renderRoot declares them once; each
+  // alias is globally unique (freshAlias) and referenced by exactly one
+  // branch (ORA-00942 when branch CTEs were previously not declared).
+  const branchCtes = branchFragments.flatMap((f) => f.ctes);
+  const seen = new Set<string>();
+  const ctes = [...rowCtes, ...branchCtes].filter((c) => {
+    if (seen.has(c.alias)) return false;
+    seen.add(c.alias);
+    return true;
+  });
+
   return {
     kind: "union",
-    ctes: [...rowCtes],
+    ctes,
     fromExtensions: "",
     columns: [],
     partitionKeys: ctx.partitionKeys,
