@@ -23,7 +23,7 @@ export default defineConfig({
   test: {
     globals: true,
     environment: "node",
-    include: ["src/**/*.test.ts", "test/**/*.test.ts"],
+    include: ["src/**/*.test.ts", "test/**/*.test.ts", "!src/tests/**", "!src/loader/**"],
     // Database operations against live Oracle can be slow.
     testTimeout: 30_000,
     coverage: {

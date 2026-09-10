@@ -211,3 +211,40 @@ export async function insertTestResources(
   );
   return result.rowsAffected ?? 0;
 }
+
+/**
+ * Inserts one FHIR resource into the test table and returns the generated
+ * surrogate id, so integration tests can clean up exactly the rows they
+ * inserted (the table has no test-id column).
+ *
+ * For `BLOB` storage the resource is serialised with lossless-json and bound
+ * as a UTF-8 Buffer; for native `JSON` storage it is bound directly as
+ * `DB_TYPE_JSON`.
+ * @param connection - An open connection.
+ * @param resource - The FHIR resource; must carry `resourceType`.
+ * @param storageType - JSON column storage variant of the target table.
+ * @param tableName - Table name; defaults to {@link TEST_TABLE_NAME}.
+ * @returns The generated id.
+ */
+export async function insertTestResourceReturningId(
+  connection: oracledb.Connection,
+  resource: { resourceType: string },
+  storageType: StorageType,
+  tableName: string = TEST_TABLE_NAME,
+): Promise<number> {
+  const json =
+    storageType === "JSON"
+      ? resource
+      : Buffer.from(losslessStringify(resource) ?? "null", "utf8");
+  const result = await connection.execute(
+    `INSERT INTO ${tableName} (resource_type, json) VALUES (:1, :2) RETURNING id INTO :3`,
+    [resource.resourceType, json, { type: oracledb.DB_TYPE_NUMBER, dir: oracledb.BIND_OUT }],
+    { autoCommit: true },
+  );
+  const outBinds = result.outBinds as unknown[][] | undefined;
+  const generatedId = outBinds?.[0]?.[0];
+  if (generatedId === undefined || generatedId === null) {
+    throw new Error("INSERT RETURNING id produced no id");
+  }
+  return Number(generatedId);
+}

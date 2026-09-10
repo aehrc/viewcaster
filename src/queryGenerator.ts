@@ -19,6 +19,7 @@ export interface QueryGeneratorOptions {
   schemaName?: string;
   resourceIdColumn?: string;
   resourceJsonColumn?: string;
+  resourceJsonDataType?: "BLOB" | "JSON";
 }
 
 /**
@@ -33,6 +34,7 @@ export class QueryGenerator {
       schemaName: "dbo",
       resourceIdColumn: "id",
       resourceJsonColumn: "json",
+      resourceJsonDataType: "BLOB",
       ...options,
     };
   }
