@@ -188,12 +188,12 @@ function buildJsonTableChain(
 ): { applyClauses: string; lastAlias: string } {
   const segments = path.split(".");
   const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
-  if (segments.length === 1) {
-    return {
-      applyClauses: `CROSS APPLY JSON_TABLE(${source}${fmt}, '$.${segments[0]}[*]' COLUMNS (${jsonTableColumns(storage)})) ${finalAlias}`,
-      lastAlias: finalAlias,
-    };
-  }
+  const columns = jsonTableColumns(storage);
+
+  // A JSON_TABLE-produced column (an APPLY alias's `value`, or a repeat CTE's
+  // `item_json`) cannot be consumed directly by another JSON_TABLE
+  // (ORA-40556): the first path segment moves into a JSON_QUERY wrap.
+  const wrapsSource = /\.value$/.test(source) || /\.item_json$/.test(source);
 
   let chain = "";
   let currentSource = source;
@@ -201,11 +201,13 @@ function buildJsonTableChain(
     const isLast = i === segments.length - 1;
     const alias = isLast ? finalAlias : `${finalAlias}_${i}`;
     if (i > 0) chain += "\n  ";
-    const columns = jsonTableColumns(storage);
-    const tableInput = i === 0
-      ? `${currentSource}${fmt}`
-      : `JSON_QUERY(${currentSource} RETURNING CLOB)`;
-    chain += `CROSS APPLY JSON_TABLE(${tableInput}, '$.${segments[i]}[*]' COLUMNS (${columns})) ${alias}`;
+    if (i === 0) {
+      chain += wrapsSource
+        ? `CROSS APPLY JSON_TABLE(JSON_QUERY(${currentSource}${fmt}, '$.${segments[i]}' RETURNING CLOB), '$[*]' COLUMNS (${columns})) ${alias}`
+        : `CROSS APPLY JSON_TABLE(${currentSource}${fmt}, '$.${segments[i]}[*]' COLUMNS (${columns})) ${alias}`;
+    } else {
+      chain += `\n  CROSS APPLY JSON_TABLE(JSON_QUERY(${currentSource}, '$.${segments[i]}' RETURNING CLOB), '$[*]' COLUMNS (${columns})) ${alias}`;
+    }
     currentSource = `${alias}.value`;
   }
   return { applyClauses: chain, lastAlias: finalAlias };
