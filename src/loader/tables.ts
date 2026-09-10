@@ -243,6 +243,7 @@ export async function tableExists(
          FROM user_tables
          WHERE table_name = :tableName`,
         [tableName.toUpperCase()],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
       const row = result.rows?.[0] as { N: number } | undefined;
       return (row?.N ?? 0) > 0;
@@ -252,6 +253,7 @@ export async function tableExists(
        FROM all_tables
        WHERE owner = :owner AND table_name = :tableName`,
       [schemaName.toUpperCase(), tableName.toUpperCase()],
+      { outFormat: oracledb.OUT_FORMAT_OBJECT },
     );
     const row = result.rows?.[0] as { N: number } | undefined;
     return (row?.N ?? 0) > 0;
@@ -283,12 +285,15 @@ export async function getExistingJsonColumnType(
            FROM user_tab_columns
            WHERE table_name = :tableName AND column_name = 'JSON'`,
           [tableName.toUpperCase()],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT },
         )
       : connection.execute(
           `SELECT data_type, char_length
            FROM all_tab_columns
            WHERE owner = :owner AND table_name = :tableName
              AND column_name = 'JSON'`,
+          [schemaName.toUpperCase(), tableName.toUpperCase()],
+          { outFormat: oracledb.OUT_FORMAT_OBJECT },
         ));
     const row = result.rows?.[0] as
       { DATA_TYPE: string; CHAR_LENGTH: number } | undefined;

@@ -27,6 +27,7 @@
  * verified in isolation.
  */
 
+import oracledb from "oracledb";
 import { describe, expect, it } from "vitest";
 
 import {
@@ -34,6 +35,8 @@ import {
   buildCreateTableStatements,
   buildJsonTypeMismatchWarning,
   resolveColumnJsonDataType,
+  getExistingJsonColumnType,
+  tableExists,
 } from "./tables";
 
 describe("buildCreateTableStatements", () => {
@@ -231,5 +234,60 @@ describe("assertNativeJsonSupported", () => {
   it("fails fast on any pre-21c version", () => {
     expect(() => assertNativeJsonSupported(1_800_000_000)).toThrow(/21c/);
     expect(() => assertNativeJsonSupported(1_202_000_000)).toThrow(/21c/);
+  });
+});
+
+describe("tableExists and getExistingJsonColumnType", () => {
+  /**
+   * Builds a fake pool whose connection records every execute options object,
+   * so the row-shape contract (explicit OUT_FORMAT_OBJECT) can be pinned
+   * without a database. The default oracledb thin mode returns rows as
+   * arrays, which would silently break the object-shaped reads.
+   * @param rows - Rows the fake connection returns.
+   * @returns The pool stub and the captured options.
+   */
+  function fakePool(rows: unknown[]): {
+    pool: { getConnection: () => Promise<unknown> };
+    capturedOptions: unknown[];
+  } {
+    const capturedOptions: unknown[] = [];
+    const connection = {
+      execute: async (
+        _sql: string,
+        _binds?: unknown,
+        options?: unknown,
+      ) => {
+        capturedOptions.push(options);
+        return { rows };
+      },
+      close: async () => undefined,
+    };
+    return {
+      pool: { getConnection: async () => connection } as never,
+      capturedOptions,
+    };
+  }
+
+  it("tableExists reads rows as objects even without a global outFormat", async () => {
+    const { pool, capturedOptions } = fakePool([{ N: 1 }]);
+    await expect(tableExists(pool as never, undefined, "T")).resolves.toBe(true);
+    expect(capturedOptions).toEqual([{ outFormat: oracledb.OUT_FORMAT_OBJECT }]);
+  });
+
+  it("tableExists reports absent tables through the same row shape", async () => {
+    const { pool } = fakePool([{ N: 0 }]);
+    await expect(tableExists(pool as never, undefined, "nope")).resolves.toBe(
+      false,
+    );
+  });
+
+  it("getExistingJsonColumnType reads column rows as objects", async () => {
+    const { pool, capturedOptions } = fakePool([
+      { DATA_TYPE: "BLOB", CHAR_LENGTH: 0 },
+    ]);
+    await expect(
+      getExistingJsonColumnType(pool as never, undefined, "fhir_resources"),
+    ).resolves.toBe("BLOB");
+    expect(capturedOptions).toEqual([{ outFormat: oracledb.OUT_FORMAT_OBJECT }]);
   });
 });

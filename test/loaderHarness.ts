@@ -49,9 +49,9 @@ import type {
   LoadResult,
 } from "../src/loader/types.js";
 
-// Rows are returned as objects and BLOB columns as Buffers, so result rows
-// can be asserted on directly.
-oracledb.outFormat = oracledb.OUT_FORMAT_OBJECT;
+// BLOB columns are fetched as Buffers so loaded resources can be asserted on
+// directly. Row shape is NOT mutated globally: every execute that reads rows
+// passes `outFormat` explicitly, mirroring the loader's real configuration.
 oracledb.fetchAsBuffer = [oracledb.BLOB];
 
 /** A small, representative set of FHIR resources used by the integration tests. */
@@ -218,6 +218,7 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
          FROM USER_TAB_COLUMNS
          WHERE TABLE_NAME = :tableName AND COLUMN_NAME = 'JSON'`,
         [tableName.toUpperCase()],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
       const row = result.rows?.[0] as { DATA_TYPE: string } | undefined;
       return row ? { dataType: row.DATA_TYPE } : undefined;
@@ -231,6 +232,8 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
     try {
       const result = await connection.execute(
         `SELECT COUNT(*) AS n FROM ${tableName}`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
       const row = result.rows?.[0] as { N: number } | undefined;
       return row?.N ?? 0;
@@ -245,6 +248,7 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
       const result = await connection.execute(
         `SELECT COUNT(*) AS n FROM user_tables WHERE table_name = :tableName`,
         [tableName.toUpperCase()],
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
       );
       const row = result.rows?.[0] as { N: number } | undefined;
       return (row?.N ?? 0) > 0;

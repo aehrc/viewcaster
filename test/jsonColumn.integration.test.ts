@@ -31,6 +31,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+import oracledb from "oracledb";
 
 import {
   createLoaderIntegrationHarness,
@@ -88,7 +89,11 @@ describe.skipIf(!oracleAvailable)(
       try {
         const queryResult = await connection.execute<{
           JSON: Buffer;
-        }>(`SELECT json FROM ${tableName} ORDER BY id`);
+        }>(
+          `SELECT json FROM ${tableName} ORDER BY id`,
+          {},
+          { outFormat: oracledb.OUT_FORMAT_OBJECT },
+        );
         const blobs = queryResult.rows?.map((row) => row.JSON) ?? [];
         expect(blobs).toHaveLength(2);
         expect(blobs[0].toString("utf8")).toBe(JSON.stringify(resources[0]));
@@ -120,6 +125,8 @@ describe.skipIf(!oracleAvailable)(
       try {
         const queryResult = await connection.execute<{ ID: string }>(
           `SELECT JSON_VALUE(json, '$.id') AS id FROM ${tableName} ORDER BY id`,
+          {},
+          { outFormat: oracledb.OUT_FORMAT_OBJECT },
         );
         const ids = queryResult.rows?.map((row) => row.ID) ?? [];
         expect(ids).toEqual(["p1", "p2", "p3"]);
