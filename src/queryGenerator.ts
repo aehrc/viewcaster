@@ -4,6 +4,8 @@
  * Public façade over the tree-walker query compiler. Builds the base
  * transpiler context (resource alias, constants, optional test id) and
  * delegates SQL generation to `compileViewDefinition`.
+ *
+ * @author John Grimes
  */
 
 import { TranspilerContext } from "./fhirpath/transpiler.js";
@@ -23,15 +25,21 @@ export interface QueryGeneratorOptions {
 }
 
 /**
- * Compiles a SQL on FHIR `ViewDefinition` to a T-SQL query.
+ * Compiles a SQL on FHIR `ViewDefinition` to an Oracle SQL query.
  */
 export class QueryGenerator {
   private readonly options: Required<QueryGeneratorOptions>;
 
+  /**
+   * Create a query generator with the given source-table configuration.
+   *
+   * @param options - Table/schema/column names and the JSON storage type the
+   *   generated SQL targets.
+   */
   constructor(options: QueryGeneratorOptions = {}) {
     this.options = {
       tableName: "fhir_resources",
-      schemaName: "dbo",
+      schemaName: "",
       resourceIdColumn: "id",
       resourceJsonColumn: "json",
       resourceJsonDataType: "BLOB",
@@ -40,7 +48,12 @@ export class QueryGenerator {
   }
 
   /**
-   * Generate a T-SQL query from a ViewDefinition.
+   * Generate an Oracle SQL query from a ViewDefinition.
+   *
+   * @param viewDef - The parsed ViewDefinition.
+   * @param testId - Optional test-isolation identifier (unused on Oracle).
+   * @returns The SQL and column metadata.
+   * @throws When transpilation fails; the message names the offending element.
    */
   generateQuery(viewDef: ViewDefinition, testId?: string): TranspilationResult {
     try {
@@ -58,6 +71,10 @@ export class QueryGenerator {
 
   /**
    * Create the base transpiler context with resource alias and constants.
+   *
+   * @param viewDef - The ViewDefinition supplying constants.
+   * @param testId - Optional test-isolation identifier.
+   * @returns The base transpiler context threaded through the whole compile.
    */
   private createBaseContext(
     viewDef: ViewDefinition,
@@ -73,6 +90,8 @@ export class QueryGenerator {
 
     return {
       resourceAlias: "r",
+      resourceJsonColumn: this.options.resourceJsonColumn,
+      resourceJsonDataType: this.options.resourceJsonDataType,
       constants,
       testId,
     };
@@ -81,6 +100,10 @@ export class QueryGenerator {
   /**
    * Extract the value from a ViewDefinitionConstant. Throws if zero or more
    * than one `value[x]` element is set.
+   *
+   * @param constant - The constant definition.
+   * @returns The constant's value.
+   * @throws Naming the constant when it has no value or multiple values.
    */
   private getConstantValue(
     constant: ViewDefinitionConstant,

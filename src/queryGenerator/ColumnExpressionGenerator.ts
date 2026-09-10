@@ -1,5 +1,31 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Generates SQL expressions for ViewDefinition columns.
+ *
+ * The default type mapping treats text as the preservation medium (research
+ * R9): boolean becomes a CASE over the 'true'/'false' text yielding
+ * NUMBER(1), and numeric/temporal FHIR types are CAST to their Oracle
+ * equivalents from the extracted text. Expressions that already yield a
+ * SQL-native type (no JSON extraction involved) are cast only via their
+ * mapped type when a type is declared.
  */
 
 import { Transpiler, TranspilerContext } from "../fhirpath/transpiler.js";
@@ -11,6 +37,12 @@ import { ViewDefinitionColumn } from "../types.js";
 export class ColumnExpressionGenerator {
   /**
    * Generate SQL expression for a column.
+   *
+   * @param column - The ViewDefinition column descriptor.
+   * @param context - The transpiler context (aliases, storage type).
+   * @returns The SQL expression for the column.
+   * @throws When the column's FHIRPath cannot be transpiled; the message
+   *   names the column and path (FR-004).
    */
   generateExpression(
     column: ViewDefinitionColumn,
@@ -22,15 +54,13 @@ export class ColumnExpressionGenerator {
       // Handle collection property.
       if (column.collection === true) {
         expression = this.generateCollectionExpression(column.path, context);
-      } else if (column.collection === false) {
-        expression = this.generateSingleValueExpression(column.path, context);
       } else {
         expression = Transpiler.transpile(column.path, context);
       }
 
       // Handle type casting if specified.
       if (column.type && column.collection !== true) {
-        expression = this.applyTypeCasting(expression, column.type);
+        expression = this.applyTypeCasting(expression, column);
       }
 
       return expression;
@@ -43,16 +73,36 @@ export class ColumnExpressionGenerator {
 
   /**
    * Apply type casting to an expression.
+   *
+   * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
+   * Casting applies only to text-extracted values; expressions that are
+   * already SQL-native (e.g. `%rowIndex` arithmetic) are left alone because
+   * they carry no text round-trip.
+   *
+   * @param expression - The SQL expression yielding the raw value.
+   * @param column - The column descriptor carrying the type and tags.
+   * @returns The expression cast to the mapped Oracle type.
    */
-  private applyTypeCasting(expression: string, type: string): string {
-    const sqlType = Transpiler.inferSqlType(type);
-    if (sqlType === "NVARCHAR(MAX)") {
+  private applyTypeCasting(
+    expression: string,
+    column: ViewDefinitionColumn,
+  ): string {
+    const sqlType = Transpiler.inferSqlType(column.type, column.tag);
+
+    // Special handling for boolean type: compare the extracted text.
+    if (sqlType === "NUMBER(1)") {
+      return this.generateBooleanCaseExpression(expression);
+    }
+
+    // VARCHAR2(4000) is the default text mapping; re-casting would add noise
+    // without changing semantics, so the expression stands.
+    if (sqlType === "VARCHAR2(4000)") {
       return expression;
     }
 
-    // Special handling for boolean type.
-    if (sqlType === "BIT") {
-      return this.generateBooleanCaseExpression(expression);
+    // Expressions already yielding SQL-native values need no text cast.
+    if (!expression.includes("JSON_VALUE")) {
+      return expression;
     }
 
     return `CAST(${expression} AS ${sqlType})`;
@@ -61,6 +111,10 @@ export class ColumnExpressionGenerator {
   /**
    * Generate a CASE expression for boolean conversion.
    * Handles both simple JSON_VALUE fields and boolean expressions.
+   *
+   * @param expression - The SQL expression yielding 'true'/'false' or a
+   *   boolean predicate.
+   * @returns A CASE expression yielding 1/0/NULL.
    */
   private generateBooleanCaseExpression(expression: string): string {
     const hasComparisonOperator =
@@ -69,7 +123,8 @@ export class ColumnExpressionGenerator {
       expression.includes(">") ||
       expression.includes("NOT") ||
       expression.includes(" OR ") ||
-      expression.includes(" AND ");
+      expression.includes(" AND ") ||
+      expression.includes("JSON_EXISTS");
 
     if (expression.includes("JSON_VALUE") && !hasComparisonOperator) {
       // Simple JSON_VALUE - compare to 'true'/'false' strings.
@@ -82,6 +137,10 @@ export class ColumnExpressionGenerator {
 
   /**
    * Generate collection expression that returns an array.
+   *
+   * @param path - The FHIRPath of the collection.
+   * @param context - The transpiler context.
+   * @returns A JSON_QUERY expression yielding the array.
    */
   private generateCollectionExpression(
     path: string,
@@ -91,88 +150,7 @@ export class ColumnExpressionGenerator {
       return `JSON_QUERY(${context.iterationContext}, '$.${path}')`;
     }
 
-    return this.buildCollectionJsonPath(path, context);
-  }
-
-  /**
-   * Build a JSON path expression for collection=true.
-   */
-  private buildCollectionJsonPath(
-    path: string,
-    context: TranspilerContext,
-  ): string {
-    const pathParts = path.split(".");
-
-    if (this.isNameFamilyPath(pathParts)) {
-      return this.buildNameFamilyCollectionQuery(context);
-    }
-
-    if (this.isNameGivenPath(pathParts)) {
-      return this.buildNameGivenCollectionQuery(context);
-    }
-
-    // For other paths, try to use JSON_QUERY to get the array directly.
-    return `JSON_QUERY(${context.resourceAlias}.json, '$.${path}')`;
-  }
-
-  /**
-   * Check if path is name.family.
-   */
-  private isNameFamilyPath(pathParts: string[]): boolean {
-    return (
-      pathParts.length === 2 &&
-      pathParts[0] === "name" &&
-      pathParts[1] === "family"
-    );
-  }
-
-  /**
-   * Check if path is name.given.
-   */
-  private isNameGivenPath(pathParts: string[]): boolean {
-    return (
-      pathParts.length === 2 &&
-      pathParts[0] === "name" &&
-      pathParts[1] === "given"
-    );
-  }
-
-  /**
-   * Build collection query for name.family path.
-   */
-  private buildNameFamilyCollectionQuery(context: TranspilerContext): string {
-    return `(
-        SELECT CASE
-          WHEN COUNT(JSON_VALUE(names.value, '$.family')) = 0 THEN JSON_QUERY('[]')
-          ELSE JSON_QUERY('[' + STRING_AGG(CONCAT('"', JSON_VALUE(names.value, '$.family'), '"'), ',') + ']')
-        END
-        FROM OPENJSON(${context.resourceAlias}.json, '$.name') AS names
-        WHERE JSON_VALUE(names.value, '$.family') IS NOT NULL
-      )`;
-  }
-
-  /**
-   * Build collection query for name.given path.
-   */
-  private buildNameGivenCollectionQuery(context: TranspilerContext): string {
-    return `(
-        SELECT CASE
-          WHEN COUNT(n.value) = 0 THEN JSON_QUERY('[]')
-          ELSE JSON_QUERY('[' + STRING_AGG(CONCAT('"', n.value, '"'), ',') + ']')
-        END
-        FROM OPENJSON(${context.resourceAlias}.json, '$.name') AS names
-        CROSS APPLY OPENJSON(names.value, '$.given') AS n
-        WHERE n.value IS NOT NULL
-      )`;
-  }
-
-  /**
-   * Generate single value expression for collection=false.
-   */
-  private generateSingleValueExpression(
-    path: string,
-    context: TranspilerContext,
-  ): string {
-    return Transpiler.transpile(path, context);
+    const jsonColumn = context.resourceJsonColumn ?? "json";
+    return `JSON_QUERY(${context.resourceAlias}.${jsonColumn}, '$.${path}')`;
   }
 }

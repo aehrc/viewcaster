@@ -8,9 +8,7 @@
 
 import type { TranspilerContext } from "../../fhirpath/transpiler.js";
 
-export const SQL_INT = "INT";
-export const SQL_NVARCHAR_4000 = "NVARCHAR(4000)";
-export const SQL_NVARCHAR_MAX = "NVARCHAR(MAX)";
+export const SQL_INT = "NUMBER(19)";
 
 export type NodeKind =
   | "ColumnsOnly"
@@ -59,17 +57,26 @@ export interface Context {
   transpilerCtx: TranspilerContext;
 }
 
+/**
+ * A branch of a unionAll: a self-contained SELECT body rendered by renderRoot
+ * and joined with top-level UNION ALL.
+ */
+export type UnionBranch = Fragment;
+
 export interface Fragment {
+  /** "union" when the fragment carries UNION ALL branches. */
+  kind?: "rows" | "union";
   ctes: CteDefinition[];
   /**
    * Ordered sequence of FROM-clause extensions: a mix of CROSS/OUTER APPLY
    * and INNER/LEFT/FULL OUTER JOIN clauses, each prefixed by "\n". Order is
    * preserved so that aliases are always introduced before they are
-   * referenced (e.g. an INNER JOIN to a Repeat CTE precedes any CROSS APPLY
-   * that reads from the CTE's `item_json`).
+   * referenced.
    */
   fromExtensions: string;
   columns: ProjectedColumn[];
   /** Keys exposed by this fragment for use by sibling joins. */
   partitionKeys: PartitionKey[];
+  /** Branch SELECT bodies, present only when kind is "union". */
+  branches?: Fragment[];
 }

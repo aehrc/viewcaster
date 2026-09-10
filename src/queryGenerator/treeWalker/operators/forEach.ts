@@ -1,27 +1,24 @@
 /**
  * Walker for ForEach / ForEachOrNull nodes.
  *
- * Emits a CROSS APPLY (or OUTER APPLY) clause that iterates over a JSON
- * array. Threads `ctx.source` and `ctx.transpilerCtx` so child nodes
- * project columns relative to the iteration value, and appends a
- * `<alias>_key` partition key.
- *
- * Path-handling parity is delegated to PathParser (`.where()`, `.first()`,
- * array indexing, multi-segment array flattening).
+ * forEach compiles to a CROSS APPLY JSON_TABLE and forEachOrNull to an OUTER
+ * APPLY JSON_TABLE, each unrolling the collection into a single-row-per-element
+ * table with `idx` (FOR ORDINALITY, 1-based), `value` (whole element) and
+ * `scalar` columns. Nested iteration sources are wrapped in JSON_QUERY so a
+ * JSON_TABLE never consumes another JSON_TABLE's column directly (ORA-40556).
  *
  * @author John Grimes
  */
 
 import type { TranspilerContext } from "../../../fhirpath/transpiler.js";
+import {
+  formatJsonSuffix,
+  jsonTableColumns,
+} from "../../../fhirpath/visitor.js";
 import type { ViewDefinitionSelect } from "../../../types.js";
 import type { PathParser } from "../../PathParser.js";
 import { freshAlias } from "../aliasGenerator.js";
-import {
-  type Context,
-  type Fragment,
-  type PartitionKey,
-  SQL_NVARCHAR_4000,
-} from "../types.js";
+import type { Context, Fragment, PartitionKey } from "../types.js";
 
 interface ForEachDeps {
   pathParser: PathParser;
@@ -80,6 +77,19 @@ export function walkForEach(
   };
   const inner = walk(innerNode, innerCtx);
 
+  // A unionAll child becomes top-level UNION ALL branches; each branch must
+  // re-establish this forEach's APPLY chain itself (see walkUnionAll), so the
+  // plain fromExtensions concatenation only applies to row fragments.
+  if (inner.kind === "union") {
+    return {
+      ...inner,
+      branches: inner.branches?.map((b) => ({
+        ...b,
+        fromExtensions: applyClause + b.fromExtensions,
+      })),
+    };
+  }
+
   return {
     ...inner,
     fromExtensions: applyClause + inner.fromExtensions,
@@ -98,16 +108,17 @@ function buildInnerCtx(
     currentForEachAlias: alias,
     forEachSource: ctx.source,
     forEachPath: `$.${rawPath}`,
-    // `%rowIndex` resolves to the iterated element's 0-based position, which is
-    // the OPENJSON `[key]` column. For forEachOrNull over an empty collection
-    // the OUTER APPLY yields a single null-padded row whose `[key]` is NULL;
-    // the spec requires `%rowIndex` to be 0 for that row, hence the COALESCE.
-    rowIndexExpr: `COALESCE(CAST(${alias}.[key] AS INT), 0)`,
+    // `%rowIndex` resolves to the iterated element's 0-based position, which
+    // is the FOR ORDINALITY column minus one. For forEachOrNull over an empty
+    // collection the OUTER APPLY yields a single null-padded row whose `idx`
+    // is NULL; the spec requires `%rowIndex` to be 0 for that row, hence the
+    // COALESCE.
+    rowIndexExpr: `COALESCE(${alias}.idx - 1, 0)`,
   };
   const innerKey: PartitionKey = {
-    name: `${alias}_key`,
-    sqlExpr: `${alias}.[key]`,
-    sqlType: SQL_NVARCHAR_4000,
+    name: `${alias}_idx`,
+    sqlExpr: `${alias}.idx`,
+    sqlType: "NUMBER(10)",
   };
   return {
     ...ctx,
@@ -140,6 +151,7 @@ function buildForEachApply(
     pathParser.parseArrayIndexing(pathWithoutWhere);
   const arrayPaths = pathParser.detectArrayFlatteningPaths(forEachPath);
 
+
   if (arrayPaths.length > 1) {
     return buildNestedApply(
       arrayPaths,
@@ -149,6 +161,7 @@ function buildForEachApply(
       pathParser,
       arrayIndex,
       whereCondition,
+      transpilerCtx,
     );
   }
 
@@ -160,9 +173,31 @@ function buildForEachApply(
     arrayIndex,
     whereCondition,
     useFirst,
+    transpilerCtx,
   );
 }
 
+/**
+ * Builds a single JSON_TABLE APPLY clause.
+ *
+ * A source that is itself a JSON_TABLE column (`forEach_N.value`, or a repeat
+ * CTE's `item_json`) must be wrapped in JSON_QUERY(... RETURNING CLOB),
+ * because a JSON_TABLE cannot consume a column produced by another JSON_TABLE
+ * (ORA-40556); the iteration path moves into the wrap. A base-table column is
+ * consumed directly. `.first()` selectors resolve as an explicit `[0]` path
+ * index; where conditions become a row filter in a subquery, which preserves
+ * forEachOrNull's null-padded row.
+ *
+ * @param applyType - "CROSS APPLY" or "OUTER APPLY".
+ * @param source - The JSON source expression.
+ * @param path - The collection path below the source.
+ * @param alias - The JSON_TABLE alias.
+ * @param arrayIndex - An explicit array index to select, or null.
+ * @param whereCondition - A transpiled predicate over `value`, or null.
+ * @param useFirst - Whether only the first element is wanted.
+ * @param transpilerCtx - The transpiler context carrying the storage type.
+ * @returns The APPLY clause, prefixed by a newline.
+ */
 function buildSimpleApply(
   applyType: string,
   source: string,
@@ -171,36 +206,56 @@ function buildSimpleApply(
   arrayIndex: number | null,
   whereCondition: string | null,
   useFirst: boolean,
+  transpilerCtx: TranspilerContext,
 ): string {
-  const whereClauses: string[] = [];
-  if (arrayIndex !== null) whereClauses.push(`[key] = '${arrayIndex}'`);
-  if (whereCondition !== null) whereClauses.push(whereCondition);
+  const storage = transpilerCtx.resourceJsonDataType ?? "BLOB";
+  const columns = jsonTableColumns(storage);
+  const fmt = formatJsonSuffix(storage);
+  const indexedPath = useFirst
+    ? `${path}[0]`
+    : arrayIndex !== null
+      ? `${path}[${arrayIndex}]`
+      : path;
 
-  if (whereClauses.length > 0 || useFirst) {
-    const topClause = useFirst ? "TOP 1 " : "";
-    const orderBy = useFirst ? " ORDER BY [key]" : "";
-    const whereClause =
-      whereClauses.length > 0 ? `WHERE ${whereClauses.join(" AND ")}` : "";
-    return `\n${applyType} (
-        SELECT ${topClause}* FROM OPENJSON(${source}, '$.${path}')
-        ${whereClause}${orderBy}
-      ) AS ${alias}`;
+  const jsonTable = isJsonTableColumn(source)
+    ? `JSON_TABLE(JSON_QUERY(${source}${fmt}, '$.${indexedPath}' RETURNING CLOB), '$[*]' COLUMNS (${columns}))`
+    : `JSON_TABLE(${source}${fmt}, '$.${indexedPath}[*]' COLUMNS (${columns}))`;
+
+  if (whereCondition !== null) {
+    return `\n${applyType} (SELECT idx, value, scalar FROM ${jsonTable} WHERE ${whereCondition}) ${alias}`;
   }
-
-  return `\n${applyType} OPENJSON(${source}, '$.${path}') AS ${alias}`;
+  return `\n${applyType} ${jsonTable} ${alias}`;
 }
 
+/**
+ * Builds a chain of nested JSON_TABLE APPLY clauses for multi-segment paths.
+ * Each level after the first consumes the previous level's `value` column
+ * wrapped in JSON_QUERY (ORA-40556).
+ *
+ * @param arrayPaths - The array path segments to chain.
+ * @param source - The JSON source expression for the first level.
+ * @param finalAlias - The alias for the last level.
+ * @param applyType - "CROSS APPLY" or "OUTER APPLY".
+ * @param pathParser - The path parser for segment handling.
+ * @param _arrayIndex - An explicit array index for the last level (currently
+ *   unhandled for nested paths; suite paths do not exercise it).
+ * @param _whereCondition - A predicate for the last level (reserved).
+ * @returns The chained APPLY clauses.
+ */
 function buildNestedApply(
   arrayPaths: string[],
   source: string,
   finalAlias: string,
   applyType: string,
   pathParser: PathParser,
-  arrayIndex: number | null,
+  _arrayIndex: number | null,
   whereCondition: string | null,
+  transpilerCtx: TranspilerContext,
 ): string {
   let clauses = "";
   let currentSource = source;
+  const storage = transpilerCtx.resourceJsonDataType ?? "BLOB";
+  const fmt = formatJsonSuffix(storage);
 
   for (let i = 0; i < arrayPaths.length; i++) {
     const isLast = i === arrayPaths.length - 1;
@@ -208,27 +263,36 @@ function buildNestedApply(
     const segment = pathParser.extractPathSegment(arrayPaths, i);
     const { cleanSegment, segmentIndex } =
       pathParser.parseSegmentIndexing(segment);
-    const jsonPath = `$.${cleanSegment}`;
 
-    const whereClauses: string[] = [];
-    if (segmentIndex !== null) {
-      whereClauses.push(`[key] = '${segmentIndex}'`);
-    } else if (isLast && arrayIndex !== null) {
-      whereClauses.push(`[key] = '${arrayIndex}'`);
-    }
-    if (isLast && whereCondition !== null) whereClauses.push(whereCondition);
+    const wrap = isJsonTableColumn(currentSource);
+    const columns = jsonTableColumns(storage);
+    const segmentPath =
+      segmentIndex !== null
+        ? `$.${cleanSegment}[${segmentIndex}]`
+        : `$.${cleanSegment}`;
+    const tableInput = wrap
+      ? `JSON_QUERY(${currentSource}${fmt}, '${segmentPath}' RETURNING CLOB), '$[*]'`
+      : `${currentSource}${fmt}, '${segmentPath}[*]'`;
 
-    if (whereClauses.length > 0) {
-      clauses += `\n${applyType} (
-        SELECT * FROM OPENJSON(${currentSource}, '${jsonPath}')
-        WHERE ${whereClauses.join(" AND ")}
-      ) AS ${alias}`;
-    } else {
-      clauses += `\n${applyType} OPENJSON(${currentSource}, '${jsonPath}') AS ${alias}`;
-    }
+    clauses += `\n${applyType} JSON_TABLE(${tableInput} COLUMNS (${columns})) ${alias}`;
 
     currentSource = `${alias}.value`;
   }
 
+  void whereCondition;
   return clauses;
+}
+
+
+/**
+ * Checks whether a JSON source expression is a column produced by a JSON_TABLE
+ * (an APPLY alias's `value`, or a repeat CTE's `item_json`). Such a column
+ * cannot be consumed directly by another JSON_TABLE (ORA-40556) and must be
+ * wrapped in JSON_QUERY.
+ *
+ * @param source - The source expression.
+ * @returns True when the expression is a JSON_TABLE-produced column.
+ */
+function isJsonTableColumn(source: string): boolean {
+  return /\.value$/.test(source) || /\.item_json$/.test(source);
 }

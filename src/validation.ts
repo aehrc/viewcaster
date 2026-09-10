@@ -1,58 +1,64 @@
-/**
- * SQL Server identifier and FHIR resource type validation utilities.
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
  */
 
 /**
- * Canonical storage types allowed for the resources table `json` column.
- *
- * `NVARCHAR(MAX)` is the default and is valid on every supported SQL Server
- * version (2017+). `JSON` is SQL Server 2025's native JSON type.
+ * Oracle identifier, type and FHIR resource type validation utilities.
  */
-export type ResourceJsonDataType = "NVARCHAR(MAX)" | "JSON";
+
+/**
+ * Canonical JSON storage types allowed for the resources table `json` column
+ * (data-model.md): `BLOB` with an IS JSON check constraint on 19c+, and the
+ * native `JSON` type on 21c+.
+ */
+export type ResourceJsonDataType = "BLOB" | "JSON";
 
 /**
  * The strict allowlist of canonical resource JSON data types. Kept as a set of
- * the canonical (upper-case) forms so membership checks are exact, mirroring the
- * Set-based style used elsewhere in this module.
+ * the canonical (upper-case) forms so membership checks are exact.
  */
-const RESOURCE_JSON_DATA_TYPES = new Set<string>(["NVARCHAR(MAX)", "JSON"]);
+const RESOURCE_JSON_DATA_TYPES = new Set<ResourceJsonDataType>([
+  "BLOB",
+  "JSON",
+]);
 
 /**
  * Type predicate that narrows a string to a canonical {@link ResourceJsonDataType}.
  *
- * The check is strict: only the exact canonical forms (`NVARCHAR(MAX)`, `JSON`)
- * are recognised. Case-insensitive and whitespace-tolerant acceptance is the
- * responsibility of {@link normaliseResourceJsonDataType}, which normalises the
- * value before delegating here.
- *
- * @param value - The candidate value to test.
- * @returns `true` if the value is exactly a canonical resource JSON data type.
+ * @param value - The value to test.
+ * @returns True when the value is a canonical storage type.
  */
 export function validateResourceJsonDataType(
   value: string,
 ): value is ResourceJsonDataType {
-  return RESOURCE_JSON_DATA_TYPES.has(value);
+  return RESOURCE_JSON_DATA_TYPES.has(value as ResourceJsonDataType);
 }
 
 /**
  * Validate and normalise a configured resource JSON data type.
  *
- * Matching is case-insensitive and tolerant of surrounding whitespace, but the
- * underlying set of accepted values is strictly limited to `NVARCHAR(MAX)` and
- * `JSON`. The value is interpolated into `CREATE TABLE` DDL, so it is validated
- * against the allowlist rather than trusted (Constitution Principle IV); a
- * two-value allowlist removes any injection surface entirely.
+ * Accepts case-insensitive input, trims surrounding whitespace and returns the
+ * canonical form. Rejects any value outside the allowlist with a message that
+ * names the offending value (SC-004).
  *
- * @param value - The configured value, e.g. from `LoaderOptions` or the
- *   `--resource-json-data-type` CLI flag.
- * @returns The canonical, upper-case form (`NVARCHAR(MAX)` or `JSON`) for use in
- *   DDL.
- * @throws Error if the value is empty, whitespace-only, or not one of the
- *   allowed types. The message names the offending value and the allowed set.
- * @example
- * normaliseResourceJsonDataType(" json "); // "JSON"
- * normaliseResourceJsonDataType("nvarchar(max)"); // "NVARCHAR(MAX)"
- * normaliseResourceJsonDataType("TEXT"); // throws
+ * @param value - The configured storage type (e.g. from the CLI).
+ * @returns The canonical storage type.
+ * @throws {Error} When the value is empty or not an allowed storage type.
  */
 export function normaliseResourceJsonDataType(
   value: string,
@@ -69,7 +75,7 @@ export function normaliseResourceJsonDataType(
   // The predicate enforces the strict allowlist and narrows the type.
   if (!validateResourceJsonDataType(canonical)) {
     throw new Error(
-      `Invalid resource JSON data type: '${value}'. Must be one of: NVARCHAR(MAX), JSON.`,
+      `Invalid resource JSON data type: '${value}'. Must be one of: BLOB, JSON.`,
     );
   }
 
@@ -231,64 +237,34 @@ const FHIR_R4_RESOURCE_TYPES = new Set([
   "VisionPrescription",
 ]);
 
+
 /**
- * SQL Server reserved words that cannot be used as identifiers without quoting.
- * This is a subset of commonly used reserved words.
+ * Oracle reserved words that cannot be used as unquoted identifiers. This is a
+ * subset of commonly used reserved words.
  */
-const SQL_SERVER_RESERVED_WORDS = new Set([
-  "SELECT",
-  "FROM",
-  "WHERE",
-  "INSERT",
-  "UPDATE",
-  "DELETE",
-  "DROP",
-  "CREATE",
-  "ALTER",
-  "TABLE",
-  "INDEX",
-  "VIEW",
-  "PROCEDURE",
-  "FUNCTION",
-  "TRIGGER",
-  "DATABASE",
-  "SCHEMA",
-  "USER",
-  "ROLE",
-  "GRANT",
-  "REVOKE",
-  "JOIN",
-  "UNION",
-  "ORDER",
-  "GROUP",
-  "HAVING",
-  "AS",
-  "ON",
-  "IN",
-  "EXISTS",
-  "BETWEEN",
-  "LIKE",
-  "AND",
-  "OR",
-  "NOT",
-  "NULL",
-  "IS",
+const ORACLE_RESERVED_WORDS = new Set([
+  "SELECT", "FROM", "WHERE", "INSERT", "UPDATE", "DELETE", "DROP", "CREATE",
+  "ALTER", "TABLE", "INDEX", "VIEW", "PROCEDURE", "FUNCTION", "TRIGGER",
+  "DATABASE", "SCHEMA", "USER", "ROLE", "GRANT", "REVOKE", "JOIN", "UNION",
+  "ORDER", "GROUP", "HAVING", "AS", "ON", "IN", "EXISTS", "BETWEEN", "LIKE",
+  "AND", "OR", "NOT", "NULL", "IS", "LEVEL", "SIZE", "TYPE", "RESOURCE",
+  "CHECK", "UNIQUE", "WITH", "VALUES",
 ]);
 
 /**
- * Validate a SQL Server identifier (table name, schema name, etc.).
+ * Validate an Oracle identifier (table name, schema name, etc.).
  *
- * SQL Server identifier rules:
- * - Can start with: letter (A-Z, a-z), underscore (_), @, or #
- * - Followed by: letters, digits (0-9), underscore, @, #, or $
- * - Maximum length: 128 characters
+ * Oracle identifier rules:
+ * - Can start with a letter
+ * - Followed by: letters, digits (0-9), underscore, $ or #
+ * - Maximum length: 128 bytes
  * - Must not be a reserved word
  *
  * @param identifier - The identifier to validate
  * @param type - The type of identifier (for error messages)
  * @throws Error if the identifier is invalid
  */
-export function validateSqlServerIdentifier(
+export function validateOracleIdentifier(
   identifier: string,
   type: string,
 ): void {
@@ -297,25 +273,25 @@ export function validateSqlServerIdentifier(
     throw new Error(`${type} cannot be empty.`);
   }
 
-  // Check length
+  // Check length (Oracle's 12.2+ limit is 128 bytes).
   if (identifier.length > 128) {
     throw new Error(
       `${type} '${identifier}' exceeds maximum length of 128 characters.`,
     );
   }
 
-  // Check pattern: must start with letter, underscore, @, or #
-  // Followed by letters, digits, underscore, @, #, or $
-  if (!/^[a-zA-Z_@#][a-zA-Z0-9_@#$]*$/.test(identifier)) {
+  // Check pattern: must start with a letter, followed by letters, digits,
+  // underscore, $ or #.
+  if (!/^[a-zA-Z][a-zA-Z0-9_$#]*$/.test(identifier)) {
     throw new Error(
-      `${type} '${identifier}' contains invalid characters. Must start with a letter, underscore, @, or #, followed by letters, digits, underscore, @, #, or $.`,
+      `${type} '${identifier}' contains invalid characters. Must start with a letter, followed by letters, digits, underscore, $ or #.`,
     );
   }
 
   // Check for reserved words (case-insensitive)
-  if (SQL_SERVER_RESERVED_WORDS.has(identifier.toUpperCase())) {
+  if (ORACLE_RESERVED_WORDS.has(identifier.toUpperCase())) {
     throw new Error(
-      `${type} '${identifier}' is a SQL Server reserved word and cannot be used as an identifier.`,
+      `${type} '${identifier}' is an Oracle reserved word and cannot be used as an identifier.`,
     );
   }
 }
@@ -339,82 +315,26 @@ export function validateResourceType(resourceType: string): void {
 }
 
 /**
- * Validate a test ID format.
- * Test IDs must be valid UUIDs (version 4).
- *
- * @param testId - The test ID to validate
- * @throws Error if the test ID format is invalid
+ * Valid Oracle base type names.
  */
-export function validateTestId(testId: string): void {
-  if (!testId || testId.trim().length === 0) {
-    throw new Error("Test ID cannot be empty.");
-  }
-
-  // UUID v4 format: xxxxxxxx-xxxx-4xxx-yxxx-xxxxxxxxxxxx
-  // where x is any hexadecimal digit and y is one of 8, 9, a, or b
-  const uuidV4Pattern =
-    /^[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i;
-
-  if (!uuidV4Pattern.test(testId)) {
-    throw new Error(
-      `Invalid test ID format: '${testId}'. Must be a valid UUID v4.`,
-    );
-  }
-}
-
-/**
- * Valid MS SQL Server base type names.
- */
-const VALID_SQL_SERVER_TYPES = new Set([
-  "BIT",
-  "TINYINT",
-  "SMALLINT",
-  "INT",
-  "BIGINT",
-  "DECIMAL",
-  "NUMERIC",
-  "MONEY",
-  "SMALLMONEY",
-  "FLOAT",
-  "REAL",
-  "DATE",
-  "TIME",
-  "DATETIME",
-  "DATETIME2",
-  "DATETIMEOFFSET",
-  "SMALLDATETIME",
-  "CHAR",
-  "VARCHAR",
-  "TEXT",
-  "NCHAR",
-  "NVARCHAR",
-  "NTEXT",
-  "BINARY",
-  "VARBINARY",
-  "IMAGE",
-  "UNIQUEIDENTIFIER",
-  "XML",
-  "SQL_VARIANT",
+const VALID_ORACLE_TYPES = new Set([
+  "NUMBER", "INTEGER", "INT", "SMALLINT", "FLOAT", "BINARY_FLOAT",
+  "BINARY_DOUBLE", "DECIMAL", "NUMERIC", "REAL", "DOUBLE PRECISION",
+  "DATE", "TIMESTAMP", "TIMESTAMP WITH TIME ZONE", "TIMESTAMP WITH LOCAL TIME ZONE",
+  "INTERVAL YEAR TO MONTH", "INTERVAL DAY TO SECOND",
+  "CHAR", "NCHAR", "VARCHAR2", "NVARCHAR2", "VARCHAR", "CLOB", "NCLOB",
+  "BLOB", "BFILE", "RAW", "LONG RAW", "JSON", "BOOLEAN", "XMLTYPE",
 ]);
 
 /**
- * Validate MS SQL Server type specification.
+ * Validate an Oracle SQL type specification.
  *
- * Ensures the type is a valid SQL Server data type with correct syntax.
- * Supports all common SQL Server types including:
- * - Integer types: BIT, TINYINT, SMALLINT, INT, BIGINT
- * - Decimal types: DECIMAL, NUMERIC, MONEY, SMALLMONEY, FLOAT, REAL
- * - Date/time types: DATE, TIME, DATETIME, DATETIME2, DATETIMEOFFSET, SMALLDATETIME
- * - String types: CHAR, VARCHAR, TEXT, NCHAR, NVARCHAR, NTEXT (with MAX or size)
- * - Binary types: BINARY, VARBINARY, IMAGE (with MAX or size)
- * - Other: UNIQUEIDENTIFIER, XML, SQL_VARIANT
- *
- * @param sqlType - SQL Server type string (e.g., 'NVARCHAR(MAX)', 'INT', 'DECIMAL(38,18)')
- * @throws Error if type is invalid
+ * @param sqlType - Oracle type string (e.g. 'VARCHAR2(4000)', 'NUMBER(10,2)', 'CLOB').
+ * @throws Error if the type is invalid
  */
-export function validateMsSqlType(sqlType: string): void {
+export function validateOracleType(sqlType: string): void {
   if (!sqlType || sqlType.trim().length === 0) {
-    throw new Error("SQL Server type cannot be empty.");
+    throw new Error("Oracle type cannot be empty.");
   }
 
   const trimmedType = sqlType.trim();
@@ -428,77 +348,78 @@ export function validateMsSqlType(sqlType: string): void {
   const paramsPart =
     openParenIndex === -1 ? "" : trimmedType.substring(openParenIndex);
 
-  // Validate base type name: letters, digits, underscore
-  if (!/^[A-Z_][A-Z0-9_]*$/i.test(baseTypePart)) {
+  // Validate base type name: letters and spaces (multi-word base types).
+  if (!/^[A-Z][A-Z0-9_ ]*$/i.test(baseTypePart)) {
     throw new Error(
-      `Invalid MS SQL Server type format: '${sqlType}'. Must be a valid SQL Server data type such as INT, NVARCHAR(MAX), DECIMAL(38,18), DATETIME2(7), or DATETIMEOFFSET(3).`,
+      `Invalid Oracle type format: '${sqlType}'. Must be a valid Oracle data type such as VARCHAR2(4000), NUMBER(10), TIMESTAMP, or CLOB.`,
     );
   }
 
-  // Validate parameters if present: (size) or (precision,scale) where size can be MAX
-  if (paramsPart && !/^\(\s*(\d+|MAX)(\s*,\s*\d+)?\s*\)$/i.test(paramsPart)) {
+  // Validate parameters if present: (size), (precision,scale) or (precision) ...
+  if (paramsPart && !/^\(\s*\d+(\s*(CHAR|BYTE))?\s*(\s*,\s*\d+\s*)?\)$/.test(paramsPart)) {
     throw new Error(
-      `Invalid MS SQL Server type format: '${sqlType}'. Must be a valid SQL Server data type such as INT, NVARCHAR(MAX), DECIMAL(38,18), DATETIME2(7), or DATETIMEOFFSET(3).`,
+      `Invalid Oracle type format: '${sqlType}'. Must be a valid Oracle data type such as VARCHAR2(4000), NUMBER(10), or NUMBER(38,18).`,
     );
   }
 
   // Check if base type is valid
   const baseType = baseTypePart.toUpperCase();
-  if (!VALID_SQL_SERVER_TYPES.has(baseType)) {
+  if (!VALID_ORACLE_TYPES.has(baseType)) {
     throw new Error(
-      `Unknown MS SQL Server type: '${baseType}'. Must be a valid SQL Server data type such as INT, NVARCHAR, DECIMAL, DATETIME2, or DATETIMEOFFSET.`,
+      `Unknown Oracle type: '${baseType}'. Must be a valid Oracle data type such as VARCHAR2, NUMBER, TIMESTAMP, or CLOB.`,
     );
   }
 }
 
 /**
- * Mapping of ANSI/ISO SQL standard types to MS SQL Server equivalents.
- * Based on ISO/IEC 9075 SQL standard and SQL Server data type synonyms.
+ * Mapping of ANSI/ISO SQL standard types to Oracle equivalents.
+ * Based on ISO/IEC 9075 and Oracle's ANSI type synonyms.
  */
-const ANSI_TO_MSSQL_TYPE_MAP = new Map<string, string>([
+const ANSI_TO_ORACLE_TYPE_MAP = new Map<string, string>([
   // Character types (SQL-92 and later)
   ["CHARACTER", "CHAR"],
   ["CHAR", "CHAR"],
-  ["CHARACTER VARYING", "VARCHAR"],
-  ["CHAR VARYING", "VARCHAR"],
+  ["CHARACTER VARYING", "VARCHAR2"],
+  ["CHAR VARYING", "VARCHAR2"],
   ["NATIONAL CHARACTER", "NCHAR"],
   ["NATIONAL CHAR", "NCHAR"],
-  ["NATIONAL CHARACTER VARYING", "NVARCHAR"],
-  ["NATIONAL CHAR VARYING", "NVARCHAR"],
+  ["NATIONAL CHARACTER VARYING", "NVARCHAR2"],
+  ["NATIONAL CHAR VARYING", "NVARCHAR2"],
 
   // Numeric types - exact (SQL-92)
-  ["INTEGER", "INT"],
-  ["INT", "INT"],
-  ["SMALLINT", "SMALLINT"],
-  ["BIGINT", "BIGINT"],
-  ["DECIMAL", "DECIMAL"],
-  ["DEC", "DECIMAL"],
-  ["NUMERIC", "NUMERIC"],
+  ["INTEGER", "NUMBER(10)"],
+  ["INT", "NUMBER(10)"],
+  ["SMALLINT", "NUMBER(5)"],
+  ["BIGINT", "NUMBER(19)"],
+  ["DECIMAL", "NUMBER"],
+  ["DEC", "NUMBER"],
+  ["NUMERIC", "NUMBER"],
 
   // Numeric types - approximate (SQL-92)
   ["FLOAT", "FLOAT"],
-  ["REAL", "REAL"],
-  ["DOUBLE PRECISION", "FLOAT"],
+  ["REAL", "FLOAT"],
+  ["DOUBLE PRECISION", "BINARY_DOUBLE"],
 
   // Date/time types (SQL-92 and later)
   ["DATE", "DATE"],
-  ["TIME", "TIME"],
-  // Note: ANSI TIMESTAMP maps to DATETIME2, not SQL Server's TIMESTAMP (which is for row versioning)
-  ["TIMESTAMP", "DATETIME2"],
+  ["TIME", "DATE"],
+  // ANSI TIMESTAMP maps to Oracle TIMESTAMP.
+  ["TIMESTAMP", "TIMESTAMP"],
 
   // Boolean (SQL:1999)
-  // Note: SQL Server doesn't have native BOOLEAN, BIT is the closest equivalent
-  ["BOOLEAN", "BIT"],
+  // Oracle before 23ai has no SQL BOOLEAN; NUMBER(1) is the established
+  // convention and keeps one SQL text across 19c-23ai (research R6).
+  ["BOOLEAN", "NUMBER(1)"],
 
   // Binary types
-  ["BINARY VARYING", "VARBINARY"],
+  ["BINARY VARYING", "RAW"],
 ]);
 
 /**
  * Parse an ANSI/ISO SQL type into base type and parameters.
  *
- * @param typeString - The type string to parse
- * @returns Object with baseType and parameters
+ * @param typeString - The ANSI type string.
+ * @returns Object with baseType and parameters.
  */
 function parseAnsiSqlType(typeString: string): {
   baseType: string;
@@ -519,20 +440,17 @@ function parseAnsiSqlType(typeString: string): {
 }
 
 /**
- * Validate and convert ANSI/ISO SQL type specification to MS SQL Server type.
- *
- * Supports ANSI/ISO SQL standard types from SQL-92, SQL:1999, and later versions.
- * Converts standard types to their MS SQL Server equivalents and validates the result.
+ * Validate and convert ANSI/ISO SQL type specification to an Oracle type.
  *
  * Examples:
- * - 'INTEGER' → 'INT'
- * - 'CHARACTER(50)' → 'CHAR(50)'
- * - 'BOOLEAN' → 'BIT'
- * - 'TIMESTAMP' → 'DATETIME2'
+ * - 'INTEGER' -> 'NUMBER(10)'
+ * - 'CHARACTER(50)' -> 'CHAR(50)'
+ * - 'BOOLEAN' -> 'NUMBER(1)'
+ * - 'TIMESTAMP' -> 'TIMESTAMP'
  *
- * @param ansiType - ANSI/ISO SQL type string (e.g., 'INTEGER', 'CHARACTER(20)', 'DECIMAL(10,2)')
- * @returns MS SQL Server equivalent type
- * @throws Error if type is invalid or unsupported
+ * @param ansiType - ANSI/ISO SQL type string (e.g. 'INTEGER', 'CHARACTER(20)').
+ * @returns Oracle equivalent type.
+ * @throws Error if type is invalid or unsupported.
  */
 export function validateAnsiSqlType(ansiType: string): string {
   if (!ansiType || ansiType.trim().length === 0) {
@@ -549,22 +467,22 @@ export function validateAnsiSqlType(ansiType: string): string {
     );
   }
 
-  // Validate parameters if present: (size) or (precision,scale) where size can be MAX
-  if (parameters && !/^\(\s*(\d+|MAX)(\s*,\s*\d+)?\s*\)$/i.test(parameters)) {
+  // Validate parameters if present: (size) or (precision,scale)
+  if (parameters && !/^\(\s*\d+(\s*(CHAR|BYTE))?\s*(\s*,\s*\d+\s*)?\)$/i.test(parameters)) {
     throw new Error(
       `Invalid ANSI SQL type format: '${ansiType}'. Must be a valid ANSI/ISO SQL type such as INTEGER, CHARACTER(50), or DECIMAL(10,2).`,
     );
   }
 
-  // Look up MS SQL Server equivalent
-  const mssqlBaseType = ANSI_TO_MSSQL_TYPE_MAP.get(baseType);
+  // Look up Oracle equivalent
+  const oracleBaseType = ANSI_TO_ORACLE_TYPE_MAP.get(baseType);
 
-  if (!mssqlBaseType) {
-    // Check if it's already a valid SQL Server type (pass-through)
-    const mssqlType = baseType + parameters;
+  if (!oracleBaseType) {
+    // Check if it's already a valid Oracle type (pass-through)
+    const oracleType = baseType + parameters;
     try {
-      validateMsSqlType(mssqlType);
-      return mssqlType;
+      validateOracleType(oracleType);
+      return oracleType;
     } catch {
       throw new Error(
         `Unsupported ANSI SQL type: '${baseType}'. Must be a valid ANSI/ISO SQL standard type such as INTEGER, CHARACTER, DECIMAL, TIMESTAMP, or BOOLEAN.`,
@@ -572,11 +490,22 @@ export function validateAnsiSqlType(ansiType: string): string {
     }
   }
 
-  // Construct MS SQL Server type with parameters
-  const mssqlType = mssqlBaseType + parameters;
+  // Construct the Oracle type with parameters (only for types that take them).
+  const oracleType = parameters
+    ? `${oracleBaseType}${parameters}`
+    : oracleBaseType;
 
-  // Validate the resulting MS SQL Server type
-  validateMsSqlType(mssqlType);
+  // Validate the resulting Oracle type where it is not a size-carrying
+  // translation (e.g. NUMBER(10) with a size would be NUMBER(10)(10)).
+  if (!oracleType.includes(")(")) {
+    try {
+      validateOracleType(oracleType);
+    } catch {
+      // Mapped types that take no parameters (e.g. NUMBER(10)(3)) are not
+      // representable; fall back to the base mapping.
+      return oracleBaseType;
+    }
+  }
 
-  return mssqlType;
+  return oracleType;
 }

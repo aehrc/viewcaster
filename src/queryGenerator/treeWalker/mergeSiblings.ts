@@ -1,8 +1,29 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Merges sibling fragments produced by walking children of a Group.
  *
- * Flattens CTE lists, concatenates `fromExtensions` strings and `columns`
- * arrays in order, and passes `partitionKeys` through unchanged from `ctx`.
+ * Row siblings concatenate normally. When one sibling is a union fragment,
+ * every row sibling's columns and FROM extensions are distributed into each
+ * union branch (unionAll rows carry the enclosing scope's columns), and the
+ * merged result is the union fragment.
  */
 
 import type { Context, Fragment } from "./types.js";
@@ -12,23 +33,20 @@ import type { Context, Fragment } from "./types.js";
  *
  * Flattens each fragment's `ctes` list, concatenates `fromExtensions` strings
  * (preserving order so aliases are introduced before they are referenced), and
- * concatenates `columns` arrays in lexical order.  `partitionKeys` are passed
- * through unchanged from `ctx` — siblings share the same partition scope.
- *
- * Returns an empty Fragment (no CTEs, no extensions, no columns) when
- * `fragments` is empty, and returns the sole fragment unchanged when only one
- * is provided.
+ * concatenates `columns` arrays in lexical order. When any fragment is a union
+ * fragment, the row fragments' columns and extensions are folded into each of
+ * the union's branches instead, since each branch is a self-contained SELECT.
  *
  * @param fragments - Ordered array of sibling Fragments to merge.
  * @param ctx - The context of the parent Group node, used to supply
- *   `partitionKeys` for the merged result and as the base for the empty-array
- *   case.
- * @returns A single merged Fragment whose columns, CTEs, and FROM extensions
- *   are the ordered union of all input fragments.
+ *   `partitionKeys` for the merged result.
+ * @returns A single merged Fragment.
+ * @throws When two union fragments appear in the same scope (not supported).
  */
 export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
   if (fragments.length === 0) {
     return {
+      kind: "rows",
       ctes: [],
       fromExtensions: "",
       columns: [],
@@ -38,18 +56,45 @@ export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
 
   if (fragments.length === 1) return fragments[0];
 
-  const ctes = fragments.flatMap((f) => f.ctes);
-  const fromExtensions = fragments.map((f) => f.fromExtensions).join("");
-  const columns = fragments.flatMap((f) => f.columns);
+  const rowFragments = fragments.filter((f) => f.kind !== "union");
+  const unionFragments = fragments.filter((f) => f.kind === "union");
 
-  // Row siblings + zero or more set siblings: each set fragment already carries
-  // its own INNER JOIN to its CTE, joined on the partition keys it inherited
-  // from `ctx`. The outer FROM stays as the resource table so row siblings can
-  // keep their references to `r` valid.
+  if (unionFragments.length === 0) {
+    return {
+      kind: "rows",
+      ctes: fragments.flatMap((f) => f.ctes),
+      fromExtensions: fragments.map((f) => f.fromExtensions).join(""),
+      columns: fragments.flatMap((f) => f.columns),
+      partitionKeys: ctx.partitionKeys,
+    };
+  }
+
+  if (unionFragments.length > 1) {
+    throw new Error(
+      "Multiple unionAll elements at the same select level are not supported by this implementation",
+    );
+  }
+
+  const union = unionFragments[0];
+  const rowCtes = rowFragments.flatMap((f) => f.ctes);
+  const rowFromExtensions = rowFragments
+    .map((f) => f.fromExtensions)
+    .join("");
+  const rowColumns = rowFragments.flatMap((f) => f.columns);
+
   return {
-    ctes,
-    fromExtensions,
-    columns,
+    kind: "union",
+    ctes: [...rowCtes, ...union.ctes],
+    fromExtensions: "",
+    columns: union.columns,
     partitionKeys: ctx.partitionKeys,
+    branches: (union.branches ?? []).map((branch) => ({
+      ...branch,
+      ctes: [...rowCtes, ...branch.ctes],
+      // Row siblings' APPLY/JOIN chains come before the branch's own, and the
+      // union fragment's branches already carry the enclosing ancestor chain.
+      fromExtensions: rowFromExtensions + branch.fromExtensions,
+      columns: [...rowColumns, ...branch.columns],
+    })),
   };
 }

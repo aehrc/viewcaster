@@ -1,19 +1,28 @@
 /**
  * Builds WHERE clauses for SQL queries.
+ *
+ * @author John Grimes
  */
 
 import { Transpiler, TranspilerContext } from "../fhirpath/transpiler.js";
 import { ViewDefinitionWhere } from "../types.js";
-import { validateResourceType, validateTestId } from "../validation.js";
+import { validateResourceType } from "../validation.js";
 
 /**
  * Handles generation of WHERE clauses.
  */
 export class WhereClauseBuilder {
   /**
-   * Build complete WHERE clause combining resource type filter and view-level filters.
-   * For test execution, testId is used to filter test data in the test table.
-   * Validates inputs to prevent SQL injection.
+   * Build complete WHERE clause combining resource type filter and view-level
+   * filters. Validates inputs to prevent SQL injection.
+   *
+   * @param resourceType - The FHIR resource type being queried.
+   * @param resourceAlias - The alias the resources table is referenced by.
+   * @param testId - Unused on Oracle (the test harness uses dedicated table
+   *   names for isolation); retained for signature parity with the reference.
+   * @param whereConditions - View-level WHERE conditions.
+   * @param context - The transpiler context for FHIRPath translation.
+   * @returns The WHERE clause, or null when no conditions apply.
    */
   buildWhereClause(
     resourceType: string,
@@ -26,13 +35,11 @@ export class WhereClauseBuilder {
 
     // Validate and add resource type filter.
     validateResourceType(resourceType);
-    conditions.push(`[${resourceAlias}].[resource_type] = '${resourceType}'`);
+    conditions.push(
+      `${resourceAlias}.resource_type = '${resourceType}'`,
+    );
 
-    // Validate and add test_id filter for test isolation (only used in test table which has test_id column).
-    if (testId) {
-      validateTestId(testId);
-      conditions.push(`[${resourceAlias}].[test_id] = '${testId}'`);
-    }
+    void testId;
 
     // Add view-level WHERE conditions.
     const viewWhereClause = this.generateViewWhereClause(
@@ -68,9 +75,11 @@ export class WhereClauseBuilder {
       try {
         const condition = Transpiler.transpile(where.path, context);
 
-        // Check if this looks like a simple boolean field reference that needs to be cast.
+        // Check if this looks like a simple boolean field reference that needs
+        // to be cast. The transpiler emits 'true'/'false' string comparisons
+        // for booleans, which are not valid predicates on their own.
         const simpleBooleanFieldPattern = new RegExp(
-          `^JSON_VALUE\\([^,]+,\\s*'\\$\\.(${booleanFields.join("|")})'\\)$`,
+          `^\\(?JSON_VALUE\\([^,]+,\\s*'\\$\\.(${booleanFields.join("|")})'[^)]*\\)\\)?$`,
         );
 
         if (simpleBooleanFieldPattern.test(condition.trim())) {

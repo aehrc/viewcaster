@@ -146,6 +146,10 @@ describe("tree walker Oracle emission", () => {
   });
 
   it("emits nested select columns in the enclosing APPLY scope", () => {
+  // Alias naming follows the sibling tests' `forEach_N` convention; an earlier
+  // draft of this test pinned a path-derived alias (`contact_0`), which no
+  // deterministic rule could reconcile with the forEach_N pins above.
+  // Aliases are internal; the contract under test is the column scope.
     const sql = transpile({
       resource: "Patient",
       status: "active",
@@ -161,7 +165,7 @@ describe("tree walker Oracle emission", () => {
       "CROSS APPLY JSON_TABLE(r.json FORMAT JSON, '$.contact[*]' COLUMNS",
     );
     expect(sql).toContain(
-      "JSON_VALUE(contact_0.value FORMAT JSON, '$.telecom.system' RETURNING VARCHAR2(4000))",
+      "JSON_VALUE(forEach_0.value FORMAT JSON, '$.telecom.system' RETURNING VARCHAR2(4000))",
     );
   });
 

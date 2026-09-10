@@ -1,6 +1,30 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
- * FHIRPath expression transpiler to T-SQL.
- * Converts FHIRPath expressions to equivalent T-SQL expressions for MS SQL Server.
+ * FHIRPath expression transpiler to Oracle SQL.
+ *
+ * Converts FHIRPath expressions to equivalent Oracle SQL expressions. The
+ * visitor emits dialect-neutral JSON_VALUE/JSON_QUERY fragments; this module
+ * applies the Oracle-specific syntax (FORMAT JSON in BLOB storage mode,
+ * RETURNING clauses) in a single terminal pass, so the visitor's pattern
+ * matching never sees the Oracle decorations.
  */
 
 import { CharStreams, CommonTokenStream } from "antlr4ts";
@@ -10,15 +34,21 @@ import {
   fhirpathParser,
 } from "../generated/grammar/fhirpathParser";
 import type { ViewDefinitionColumnTag } from "../types.js";
-import { validateAnsiSqlType, validateMsSqlType } from "../validation.js";
-import { FHIRPathToTSqlVisitor, TranspilerContext } from "./visitor";
+import { validateAnsiSqlType, validateOracleType } from "../validation.js";
+import { FHIRPathToOracleVisitor, TranspilerContext } from "./visitor";
 
 // Re-export TranspilerContext from visitor
 export { TranspilerContext } from "./visitor";
 
 export class Transpiler {
   /**
-   * Transpile a FHIRPath expression to T-SQL.
+   * Transpile a FHIRPath expression to Oracle SQL.
+   *
+   * @param expression - The FHIRPath expression.
+   * @param context - The transpiler context (aliases, constants, storage).
+   * @returns The Oracle SQL expression.
+   * @throws {Error} On syntax errors, unknown constants, or unsupported
+   *   constructs; the message names the offending element (FR-004).
    */
   static transpile(expression: string, context: TranspilerContext): string {
     // Check for syntax errors first, before any try-catch
@@ -29,8 +59,12 @@ export class Transpiler {
 
     try {
       // Create visitor and visit the parse tree
-      const visitor = new FHIRPathToTSqlVisitor(context);
-      return visitor.visit(parseResult.tree);
+      const visitor = new FHIRPathToOracleVisitor(context);
+      const fragment = visitor.visit(parseResult.tree);
+      return this.applyOracleJsonSyntax(
+        fragment,
+        context.resourceJsonDataType ?? "BLOB",
+      );
     } catch (error) {
       throw new Error(
         `Failed to transpile FHIRPath expression '${expression}': ${error}`,
@@ -67,38 +101,57 @@ export class Transpiler {
   }
 
   /**
+   * Applies Oracle-specific JSON syntax to the visitor's dialect-neutral
+   * fragments.
+   *
+   * JSON_VALUE/JSON_QUERY calls whose source is a simple column reference get
+   * `FORMAT JSON` after the source in BLOB storage mode (mandatory there per
+   * research R3) and a `RETURNING VARCHAR2(4000)` clause on JSON_VALUE (the
+   * documented default, emitted explicitly). Calls with a nested function
+   * call as the source (e.g. JSON_VALUE(JSON_QUERY(...))) are left alone: the
+   * inner function already yields JSON-typed text and the default return type
+   * applies. Idempotent on already-Oracle-shaped input.
+   *
+   * @param expr - The dialect-neutral SQL fragment.
+   * @param storage - The targeted JSON storage type.
+   * @returns The Oracle-shaped SQL fragment.
+   */
+  static applyOracleJsonSyntax(
+    expr: string,
+    storage: "BLOB" | "JSON",
+  ): string {
+    const formatSuffix = storage === "BLOB" ? " FORMAT JSON" : "";
+    const decorated = expr.replace(
+      /JSON_VALUE\(([^(),]+),\s*'([^']+)'\)/g,
+      (_match, source: string, path: string) =>
+        `JSON_VALUE(${source}${formatSuffix}, '${path}' RETURNING VARCHAR2(4000))`,
+    );
+    const withJsonQuery = decorated.replace(
+      /JSON_QUERY\(([^(),]+),\s*'([^']+)'\)/g,
+      (_match, source: string, path: string) =>
+        `JSON_QUERY(${source}${formatSuffix}, '${path}')`,
+    );
+    return withJsonQuery.replace(
+      /JSON_EXISTS\(([^(),]+),\s*'([^']+)'\)/g,
+      (_match, source: string, path: string) =>
+        `JSON_EXISTS(${source}${formatSuffix}, '${path}')`,
+    );
+  }
+
+  /**
    * Get the SQL data type for a FHIR type, with optional tag-based override.
    *
-   * Default mappings are conservative to accommodate ALL valid FHIR data,
-   * using MAX sizes where needed and NVARCHAR for any fields that could
-   * potentially contain Unicode characters.
+   * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
    *
-   * Design principles:
-   * - Use NVARCHAR for fields that may contain Unicode (string, code, uri/url/canonical)
-   * - Use VARCHAR for ASCII-only fields (id, uuid, oid, decimal, dates/times)
-   * - Use MAX or generous fixed sizes to prevent truncation
-   * - Preserve FHIR semantics (partial dates, arbitrary precision decimals)
-   *
-   * Users can optimise storage using type tags:
-   * - 'tsql/type' - Direct T-SQL type (e.g., 'DATE', 'VARCHAR(50)')
-   * - 'ansi/type' - ANSI/ISO SQL standard type (e.g., 'INTEGER', 'CHARACTER(50)', 'BOOLEAN')
-   *
-   * Type precedence: tsql/type > ansi/type > FHIR type defaults
-   *
-   * Example tag usage:
-   * - { "name": "tsql/type", "value": "DATE" } - Use T-SQL DATE type
-   * - { "name": "ansi/type", "value": "INTEGER" } - Use ANSI INTEGER (converted to T-SQL INT)
-   * - { "name": "ansi/type", "value": "BOOLEAN" } - Use ANSI BOOLEAN (converted to T-SQL BIT)
-   *
-   * @param fhirType - FHIR primitive type name (e.g., 'string', 'integer')
-   * @param tags - Optional array of column tags for type hints
-   * @returns MS SQL Server type specification
+   * @param fhirType - FHIR primitive type name (e.g. 'string', 'integer').
+   * @param tags - Optional array of column tags for type hints.
+   * @returns Oracle SQL type specification.
    */
   static inferSqlType(
     fhirType?: string,
     tags?: ViewDefinitionColumnTag[],
   ): string {
-    // Check for tsql/type tag override.
+    // Check for oracle/type tag override.
     const tagOverride = this.getTagTypeOverride(tags);
     if (tagOverride) {
       return tagOverride;
@@ -109,11 +162,7 @@ export class Transpiler {
   }
 
   /**
-   * Get type override from tsql/type or ansi/type tag if present.
-   *
-   * Precedence order:
-   * 1. tsql/type - Direct T-SQL type specification
-   * 2. ansi/type - ANSI/ISO SQL standard type (converted to T-SQL equivalent)
+   * Get type override from oracle/type or ansi/type tag if present.
    */
   private static getTagTypeOverride(
     tags?: ViewDefinitionColumnTag[],
@@ -122,14 +171,14 @@ export class Transpiler {
       return null;
     }
 
-    // Check for tsql/type tag first (highest precedence)
-    const tsqlTypeTag = tags.find((tag) => tag.name === "tsql/type");
-    if (tsqlTypeTag) {
-      validateMsSqlType(tsqlTypeTag.value);
-      return tsqlTypeTag.value;
+    // Check for oracle/type tag first (highest precedence).
+    const oracleTypeTag = tags.find((tag) => tag.name === "oracle/type");
+    if (oracleTypeTag) {
+      validateOracleType(oracleTypeTag.value);
+      return oracleTypeTag.value;
     }
 
-    // Check for ansi/type tag (lower precedence)
+    // Check for ansi/type tag (lower precedence).
     const ansiTypeTag = tags.find((tag) => tag.name === "ansi/type");
     if (ansiTypeTag) {
       return validateAnsiSqlType(ansiTypeTag.value);
@@ -139,48 +188,43 @@ export class Transpiler {
   }
 
   /**
-   * Get default MS SQL Server type mapping for a FHIR primitive type.
+   * Get the default Oracle type mapping for a FHIR primitive type
+   * (research R9). Text is the default so FHIR semantics (partial dates,
+   * arbitrary-precision decimals, Unicode) are preserved; native types are an
+   * explicit opt-in via type tags.
    */
   private static getDefaultFhirTypeMapping(fhirType?: string): string {
-    // Conservative default type mappings based on FHIR R4 constraints.
-    // Sized to accommodate ALL valid FHIR data.
-    // Uses NVARCHAR for potential Unicode, VARCHAR for ASCII-only.
     const typeMap: Record<string, string> = {
-      // ASCII-only types with fixed constraints
-      id: "VARCHAR(64)",
-      boolean: "BIT",
-      integer: "INT",
-      positiveint: "INT",
-      unsignedint: "INT",
-      integer64: "BIGINT",
+      id: "VARCHAR2(64)",
+      boolean: "NUMBER(1)",
+      integer: "NUMBER(10)",
+      positiveint: "NUMBER(10)",
+      unsignedint: "NUMBER(10)",
+      integer64: "NUMBER(19)",
 
-      // ASCII-only structured formats
-      uuid: "VARCHAR(100)",
-      oid: "VARCHAR(255)",
-      decimal: "VARCHAR(MAX)",
-      date: "VARCHAR(10)",
-      datetime: "VARCHAR(50)",
-      instant: "VARCHAR(50)",
-      time: "VARCHAR(20)",
+      uuid: "VARCHAR2(100)",
+      oid: "VARCHAR2(255)",
+      decimal: "VARCHAR2(4000)",
+      date: "VARCHAR2(10)",
+      datetime: "VARCHAR2(50)",
+      instant: "VARCHAR2(50)",
+      time: "VARCHAR2(20)",
 
-      // Unicode-capable text types
-      string: "NVARCHAR(MAX)",
-      markdown: "NVARCHAR(MAX)",
-      code: "NVARCHAR(MAX)",
+      string: "VARCHAR2(4000)",
+      markdown: "VARCHAR2(4000)",
+      code: "VARCHAR2(4000)",
 
-      // URIs (can be IRIs with Unicode)
-      uri: "NVARCHAR(MAX)",
-      url: "NVARCHAR(MAX)",
-      canonical: "NVARCHAR(MAX)",
+      uri: "VARCHAR2(4000)",
+      url: "VARCHAR2(4000)",
+      canonical: "VARCHAR2(4000)",
 
-      // Binary data
-      base64binary: "VARBINARY(MAX)",
+      base64binary: "VARCHAR2(4000)",
     };
 
     if (!fhirType) {
-      return "NVARCHAR(MAX)";
+      return "VARCHAR2(4000)";
     }
 
-    return typeMap[fhirType.toLowerCase()] ?? "NVARCHAR(MAX)";
+    return typeMap[fhirType.toLowerCase()] ?? "VARCHAR2(4000)";
   }
 }

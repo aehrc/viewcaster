@@ -30,7 +30,6 @@ import { tmpdir } from "os";
 import { join } from "path";
 import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
-const CLI = ["bunx", "tsx", "src/cli.ts", "transpile"];
 const VALID_VIEW = JSON.stringify({
   resource: "Patient",
   status: "active",
@@ -53,6 +52,10 @@ let tempDir: string;
 beforeAll(() => {
   tempDir = mkdtempSync(join(tmpdir(), "sof-oracle-cli-"));
 });
+afterAll(() => {
+  if (tempDir) rmSync(tempDir, { recursive: true, force: true });
+});
+
 /**
  * Run the transpile subcommand with the given arguments and stdin.
  *

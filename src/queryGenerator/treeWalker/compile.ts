@@ -2,7 +2,9 @@
  * Public entry point for the tree-walker query generator.
  *
  * Wraps viewDef.select as a synthetic Group node, walks it, and renders
- * the resulting Fragment as a single T-SQL statement.
+ * the resulting Fragment as a single Oracle SELECT statement.
+ *
+ * @author John Grimes
  */
 
 import { Transpiler, TranspilerContext } from "../../fhirpath/transpiler.js";
@@ -31,17 +33,8 @@ export interface CompileOptions {
 }
 
 /**
- * Compiles a ViewDefinition into a T-SQL query string and column metadata.
- *
- * Wraps `viewDef.select` as a synthetic root Group node, walks the entire
- * select tree to produce a Fragment, then renders that Fragment into a
- * complete T-SQL statement (WITH … SELECT … FROM … WHERE).
- *
- * @param viewDef - The parsed ViewDefinition whose `select` tree is compiled.
- * @param options - Compilation options including table/schema names, an
- *   optional test-isolation ID, and the FHIRPath transpiler context.
- * @returns A `TranspilationResult` containing the generated SQL string and
- *   an ordered array of column metadata matching the view's output shape.
+ * Compiles a ViewDefinition into an Oracle SQL query string and column
+ * metadata.
  */
 export function compileViewDefinition(
   viewDef: ViewDefinition,
@@ -77,15 +70,12 @@ function buildRootContext(
 ): Context {
   const idKey: PartitionKey = {
     name: "id",
-    sqlExpr: `[${resourceAlias}].[id]`,
+    sqlExpr: `${resourceAlias}.id`,
     sqlType: SQL_INT,
   };
   return {
     resourceAlias,
-    // Use unbracketed `r.json` for the JSON source: matches the FHIRPath
-    // transpiler's expectations (see visitor.ts handleJsonQueryMember which
-    // pattern-matches on the source string).
-    source: `${resourceAlias}.json`,
+    source: `${resourceAlias}.${transpilerCtx.resourceJsonColumn ?? "json"}`,
     partitionKeys: [idKey],
     ancestorApplies: "",
     cteCounter: { value: 0 },

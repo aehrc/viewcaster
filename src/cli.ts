@@ -2,16 +2,21 @@
 
 /**
  * CLI for SQL on FHIR tooling.
- * Supports transpiling ViewDefinitions and loading NDJSON data.
+ * Supports transpiling ViewDefinitions to Oracle SQL.
+ *
+ * @author John Grimes
  */
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync } from "fs";
 import { SqlOnFhir } from "./index.js";
-import { createLoadCommand } from "./load.js";
+import { normaliseResourceJsonDataType } from "./validation.js";
 
 /**
  * Read input from stdin or file.
+ *
+ * @param inputFile - Optional path to read from; stdin when absent.
+ * @returns The input text.
  */
 async function readInput(inputFile?: string): Promise<string> {
   if (inputFile) {
@@ -28,6 +33,9 @@ async function readInput(inputFile?: string): Promise<string> {
 
 /**
  * Write output to stdout or file.
+ *
+ * @param sql - The SQL to write.
+ * @param outputFile - Optional path to write to; stdout when absent.
  */
 function writeOutput(sql: string, outputFile?: string): void {
   if (outputFile) {
@@ -38,42 +46,87 @@ function writeOutput(sql: string, outputFile?: string): void {
 }
 
 /**
- * Create the transpile command (default behaviour).
+ * Create the transpile command.
+ *
+ * @returns The configured commander command.
  */
 function createTranspileCommand(): Command {
   const command = new Command("transpile");
 
   command
-    .description("Transpile SQL on FHIR ViewDefinitions to T-SQL queries")
+    .description("Transpile SQL on FHIR ViewDefinitions to Oracle SQL queries")
     .option(
       "-i, --input <file>",
       "Input ViewDefinition JSON file (default: stdin)",
     )
     .option("-o, --output <file>", "Output SQL file (default: stdout)")
-    .action(async (options: { input?: string; output?: string }) => {
-      try {
-        // Read ViewDefinition from stdin or file.
-        const input = await readInput(options.input);
+    .option(
+      "--resource-json-data-type <type>",
+      "JSON storage type the SQL targets: BLOB (default, 19c+) or JSON (21c+)",
+    )
+    .option("--table-name <name>", "Source table name")
+    .option("--schema-name <name>", "Source schema name")
+    .option("--resource-id-column <name>", "Surrogate id column name")
+    .option("--resource-json-column <name>", "JSON column name")
+    .action(
+      async (options: {
+        input?: string;
+        output?: string;
+        resourceJsonDataType?: string;
+        tableName?: string;
+        schemaName?: string;
+        resourceIdColumn?: string;
+        resourceJsonColumn?: string;
+      }) => {
+        try {
+          // Read ViewDefinition from stdin or file.
+          const input = await readInput(options.input);
 
-        // Parse and validate JSON.
-        const viewDefinition: object = JSON.parse(input);
+          // Parse and validate JSON.
+          const viewDefinition: object = JSON.parse(input);
 
-        // Transpile to SQL.
-        const sqlOnFhir = new SqlOnFhir();
-        const result = sqlOnFhir.transpile(viewDefinition);
+          // Validate the storage type before anything else, so an invalid
+          // value never reaches the database-facing layers.
+          const resourceJsonDataType = options.resourceJsonDataType
+            ? normaliseResourceJsonDataType(options.resourceJsonDataType)
+            : undefined;
 
-        // Write SQL to stdout or file.
-        writeOutput(result.sql, options.output);
-      } catch (err) {
-        console.error(
-          `Error: ${err instanceof Error ? err.message : String(err)}`,
-        );
-        process.exit(1);
-      }
-    });
+          // Transpile to SQL.
+          const sqlOnFhir = new SqlOnFhir({
+            ...(options.tableName !== undefined && {
+              tableName: options.tableName,
+            }),
+            ...(options.schemaName !== undefined && {
+              schemaName: options.schemaName,
+            }),
+            ...(options.resourceIdColumn !== undefined && {
+              resourceIdColumn: options.resourceIdColumn,
+            }),
+            ...(options.resourceJsonColumn !== undefined && {
+              resourceJsonColumn: options.resourceJsonColumn,
+            }),
+            ...(resourceJsonDataType !== undefined && {
+              resourceJsonDataType,
+            }),
+          });
+          const result = sqlOnFhir.transpile(viewDefinition);
+
+          // Write SQL to stdout or file. The SQL is exactly one SELECT
+          // statement; nothing is written on failure (the write happens after
+          // a successful transpile).
+          writeOutput(result.sql, options.output);
+        } catch (err) {
+          console.error(
+            `Error: ${err instanceof Error ? err.message : String(err)}`,
+          );
+          process.exit(1);
+        }
+      },
+    );
 
   return command;
 }
+
 /**
  * Main CLI entry point.
  */
@@ -81,13 +134,12 @@ async function main(): Promise<void> {
   const program = new Command();
 
   program
-    .name("sof-mssql")
-    .description("SQL on FHIR tooling for MS SQL Server")
-    .version("1.0.0");
+    .name("sof-oracle")
+    .description("SQL on FHIR tooling for Oracle Database")
+    .version("0.1.0");
 
   // Add subcommands.
   program.addCommand(createTranspileCommand());
-  program.addCommand(createLoadCommand());
 
   // Parse arguments.
   await program.parseAsync(process.argv);

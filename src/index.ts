@@ -42,17 +42,10 @@ export class SqlOnFhir {
    * @param viewDefinition - The ViewDefinition to transpile
    */
   transpile(viewDefinition: ViewDefinitionInput): TranspilationResult {
-    let viewDef: ViewDefinition;
-
-    if (
-      typeof viewDefinition === "string" ||
-      (typeof viewDefinition === "object" && "resourceType" in viewDefinition)
-    ) {
-      viewDef = ViewDefinitionParser.parseViewDefinition(viewDefinition);
-    } else {
-      viewDef = viewDefinition as ViewDefinition;
-    }
-
+    // Always validate on intake: string and resourceType-wrapped inputs are
+    // parsed, raw objects are structurally validated, so an invalid
+    // ViewDefinition can never reach the SQL generator.
+    const viewDef = ViewDefinitionParser.parseViewDefinition(viewDefinition);
     return this.queryGenerator.generateQuery(viewDef);
   }
 }

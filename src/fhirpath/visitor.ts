@@ -1,5 +1,14 @@
 /**
- * FHIRPath to T-SQL visitor implementation using ANTLR.
+ * FHIRPath to Oracle SQL visitor implementation using ANTLR.
+ *
+ * The visitor emits dialect-neutral JSON function fragments
+ * (`JSON_VALUE`/`JSON_QUERY`/`JSON_EXISTS` over a source expression and a JSON
+ * path). The Oracle-specific decorations (`FORMAT JSON` and `RETURNING`
+ * clauses, applied in BLOB storage mode) are applied in a single terminal
+ * pass by `Transpiler.applyOracleJsonSyntax`, so the visitor's pattern
+ * matching never sees them. JSON_TABLE templates are emitted fully formed
+ * (they need multi-clause column lists the terminal pass cannot reconstruct)
+ * using the storage type from the context.
  *
  * @author John Grimes
  */
@@ -49,12 +58,39 @@ import {
 } from "../generated/grammar/fhirpathParser";
 import { fhirpathVisitor } from "../generated/grammar/fhirpathVisitor";
 
+/**
+ * JSON_TABLE column list for iterating an array. `value` carries the whole
+ * element (CLOB, marked FORMAT JSON in BLOB mode so downstream JSON functions
+ * accept it); `scalar` carries it as text.
+ *
+ * @param storage - The targeted JSON storage type.
+ * @returns The COLUMNS clause text.
+ */
+export function jsonTableColumns(storage: "BLOB" | "JSON"): string {
+  const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
+  return `idx FOR ORDINALITY, value CLOB${fmt} PATH '$', scalar VARCHAR2(4000) PATH '$'`;
+}
+
+/**
+ * The `FORMAT JSON` suffix to apply to a JSON source expression.
+ *
+ * @param storage - The targeted JSON storage type.
+ * @returns ` FORMAT JSON` in BLOB mode, empty string in native JSON mode.
+ */
+export function formatJsonSuffix(storage: "BLOB" | "JSON"): string {
+  return storage === "BLOB" ? " FORMAT JSON" : "";
+}
+
 export interface TranspilerContext {
   resourceAlias: string;
+  // Name of the JSON column on the resources table (defaults to "json").
+  resourceJsonColumn?: string;
+  // The JSON storage type the query targets; drives `FORMAT JSON` emission.
+  resourceJsonDataType?: "BLOB" | "JSON";
   constants?: { [key: string]: string | number | boolean | null };
   iterationContext?: string;
   // forEach iteration context
-  currentForEachAlias?: string; // The OPENJSON table alias (e.g., "forEach_0")
+  currentForEachAlias?: string; // The JSON_TABLE alias (e.g., "forEach_0")
   forEachSource?: string; // The JSON source being iterated (e.g., "r.json")
   forEachPath?: string; // The JSON path being iterated (e.g., "$.name")
   // The SQL expression yielding the current iteration's 0-based index, used to
@@ -62,21 +98,42 @@ export interface TranspilerContext {
   // operator (forEach, forEachOrNull, repeat) sets this to the expression that
   // produces that iteration's position; absent at the resource root.
   rowIndexExpr?: string;
-  // The FHIR datatype resolved from an explicit `ofType(X)` applied directly to
-  // a `lowBoundary()`/`highBoundary()` input. It governs which boundary
-  // algorithm is emitted (research Decision 2). Set only on the short-lived
-  // iteration context created for a boundary dispatch; absent means the datatype
-  // is inferred from the value's lexical form at SQL runtime.
+  // The FHIR datatype resolved from an explicit `ofType(X)` applied directly
+  // to a `lowBoundary()`/`highBoundary()` input. It governs which boundary
+  // algorithm is emitted. Set only on the short-lived iteration context
+  // created for a boundary dispatch; absent means the datatype is inferred
+  // from the value's lexical form at SQL runtime.
   boundaryType?: string;
   testId?: string; // Optional test identifier for parallel test execution
 }
 
-export class FHIRPathToTSqlVisitor
+export class FHIRPathToOracleVisitor
   extends AbstractParseTreeVisitor<string>
   implements fhirpathVisitor<string>
 {
   constructor(private readonly context: TranspilerContext) {
     super();
+  }
+
+  /**
+   * The name of the JSON column on the resources table.
+   */
+  private get jsonColumn(): string {
+    return this.context.resourceJsonColumn ?? "json";
+  }
+
+  /**
+   * The targeted JSON storage type (BLOB emits `FORMAT JSON`).
+   */
+  private get storage(): "BLOB" | "JSON" {
+    return this.context.resourceJsonDataType ?? "BLOB";
+  }
+
+  /**
+   * The root JSON source expression (`r.json`).
+   */
+  private get rootJson(): string {
+    return `${this.context.resourceAlias}.${this.jsonColumn}`;
   }
 
   protected defaultResult(): string {
@@ -99,8 +156,7 @@ export class FHIRPathToTSqlVisitor
       return this.handleMemberInvocation(base, invocation);
     } else if (invocation instanceof FunctionInvocationContext) {
       // Pass the base expression's parse tree so boundary functions can detect
-      // an explicit ofType() applied directly to their input (research
-      // Decision 2).
+      // an explicit ofType() applied directly to their input.
       return this.handleFunctionInvocation(base, invocation, ctx.expression());
     }
 
@@ -155,7 +211,7 @@ export class FHIRPathToTSqlVisitor
       case "div":
         return `(${leftCasted} / ${rightCasted})`;
       case "mod":
-        return `(${leftCasted} % ${rightCasted})`;
+        return `MOD(${leftCasted}, ${rightCasted})`;
       default:
         return `(${leftCasted} * ${rightCasted})`;
     }
@@ -181,8 +237,8 @@ export class FHIRPathToTSqlVisitor
           : `(${leftCasted} - ${rightCasted})`;
       }
       case "&":
-        // String concatenation in FHIRPath, use CONCAT in SQL Server
-        return `CONCAT(${left}, ${right})`;
+        // String concatenation in FHIRPath; Oracle uses `||`.
+        return `(${left} || ${right})`;
       default: {
         const leftCasted = this.castForNumericOperation(left);
         const rightCasted = this.castForNumericOperation(right);
@@ -215,8 +271,9 @@ export class FHIRPathToTSqlVisitor
     const left = this.visit(ctx.expression(0));
     const right = this.visit(ctx.expression(1));
 
-    // Union operation - in SQL Server, we'd need a more complex implementation
-    // For now, we'll use a simplified approach
+    // FHIRPath `|` merges two collections into one. Over scalar SQL
+    // expressions the practical equivalent is taking whichever operand is
+    // present, preferring the left.
     return `COALESCE(${left}, ${right})`;
   }
 
@@ -249,7 +306,7 @@ export class FHIRPathToTSqlVisitor
 
     switch (operator) {
       case "=":
-        // Handle boolean comparisons - now that boolean literals return quoted strings
+        // Handle boolean comparisons - boolean literals return quoted strings
         return `(${left} = ${right})`;
       case "!=":
         return `(${left} != ${right})`;
@@ -269,15 +326,28 @@ export class FHIRPathToTSqlVisitor
     const right = this.visit(ctx.expression(1));
     const operator = this.getOperatorFromContext(ctx.text, left, right);
 
+    // Oracle renders membership as an EXISTS over a JSON_TABLE unrolling of
+    // the collection expression.
     if (operator === "in") {
-      // Check if left is in the collection right
-      return `EXISTS (SELECT 1 FROM OPENJSON(${right}) WHERE value = ${left})`;
+      return this.buildMembershipExists(right, left);
     } else if (operator === "contains") {
-      // Check if collection left contains right
-      return `EXISTS (SELECT 1 FROM OPENJSON(${left}) WHERE value = ${right})`;
+      return this.buildMembershipExists(left, right);
     }
 
     return this.defaultResult();
+  }
+
+  /**
+   * Builds an EXISTS predicate checking that `needle` occurs among the
+   * elements of the collection expression `collection`.
+   *
+   * @param collection - SQL fragment yielding the collection.
+   * @param needle - SQL fragment yielding the scalar to find.
+   * @returns An EXISTS(...) predicate.
+   */
+  private buildMembershipExists(collection: string, needle: string): string {
+    const fmt = formatJsonSuffix(this.storage);
+    return `EXISTS (SELECT 1 FROM JSON_TABLE(${collection}${fmt}, '$[*]' COLUMNS (value VARCHAR2(4000) PATH '$')) WHERE value = ${needle})`;
   }
 
   visitAndExpression(ctx: AndExpressionContext): string {
@@ -362,7 +432,7 @@ export class FHIRPathToTSqlVisitor
     // Handle special identifiers
     if (memberName === "id") {
       // Extract id from JSON, not from database row ID
-      return `JSON_VALUE(${this.context.resourceAlias}.json, '$.id')`;
+      return `JSON_VALUE(${this.rootJson}, '$.id')`;
     }
 
     // Known FHIR array fields should use JSON_QUERY
@@ -393,10 +463,10 @@ export class FHIRPathToTSqlVisitor
 
     // Use JSON_QUERY for known array fields, JSON_VALUE for others
     if (knownArrayFields.includes(memberName)) {
-      return `JSON_QUERY(${this.context.resourceAlias}.json, '$.${memberName}')`;
+      return `JSON_QUERY(${this.rootJson}, '$.${memberName}')`;
     }
 
-    return `JSON_VALUE(${this.context.resourceAlias}.json, '$.${memberName}')`;
+    return `JSON_VALUE(${this.rootJson}, '$.${memberName}')`;
   }
 
   visitFunctionInvocation(ctx: FunctionInvocationContext): string {
@@ -408,14 +478,15 @@ export class FHIRPathToTSqlVisitor
     if (this.context.iterationContext) {
       return this.context.iterationContext;
     }
-    return `${this.context.resourceAlias}.json`;
+    return this.rootJson;
   }
 
   visitIndexInvocation(_ctx: IndexInvocationContext): string {
     // $index in forEach contexts - return current iteration index (0-based)
     if (this.context.currentForEachAlias) {
-      // In a forEach context, use the [key] column from OPENJSON which gives the array index
-      return `${this.context.currentForEachAlias}.[key]`;
+      // In a forEach context, use the FOR ORDINALITY column (1-based, so
+      // subtract one to give the FHIRPath 0-based index)
+      return `${this.context.currentForEachAlias}.idx - 1`;
     }
     // Outside forEach context, default to 0
     return "0";
@@ -428,11 +499,11 @@ export class FHIRPathToTSqlVisitor
       this.context.forEachSource &&
       this.context.forEachPath
     ) {
-      // Calculate total count using JSON_VALUE with array length
-      // Use a subquery to count items in the JSON array
+      // Count the elements the current forEach is iterating over.
+      const fmt = formatJsonSuffix(this.storage);
       return `(
         SELECT COUNT(*)
-        FROM OPENJSON(${this.context.forEachSource}, '${this.context.forEachPath}') 
+        FROM JSON_TABLE(${this.context.forEachSource}${fmt}, '${this.context.forEachPath}[*]' COLUMNS (ord FOR ORDINALITY))
       )`;
     }
     // Outside forEach context, default to 1
@@ -506,7 +577,7 @@ export class FHIRPathToTSqlVisitor
       const filterExprCtx = paramList.expression()[0];
 
       // Transpile the filter expression with current context
-      const filterVisitor = new FHIRPathToTSqlVisitor(this.context);
+      const filterVisitor = new FHIRPathToOracleVisitor(this.context);
 
       // Return the condition directly - this is for root-level where() calls
       return filterVisitor.visit(filterExprCtx);
@@ -548,26 +619,19 @@ export class FHIRPathToTSqlVisitor
   ): string {
     const memberName = this.visit(memberCtx.identifier());
 
-    // Handle subquery results from .where() or .extension() functions
-    // Pattern: (SELECT TOP 1 value FROM OPENJSON(...) WHERE ...)
-    // OR: (SELECT TOP 1 JSON_VALUE(value, '$.field') FROM OPENJSON(...) WHERE ...)
-    if (base.startsWith("(SELECT TOP 1 ")) {
-      // Check if it already has JSON_VALUE in the SELECT
-      const jsonValueMatch =
-        /\(SELECT TOP 1 JSON_VALUE\(value, '\$\.([^']+)'\)(.*)/.exec(base);
-      if (jsonValueMatch) {
-        // Already has JSON_VALUE, append to the path
-        // Convert: (SELECT TOP 1 JSON_VALUE(value, '$.field') FROM ...)
-        // To: (SELECT TOP 1 JSON_VALUE(value, '$.field.member') FROM ...)
-        const existingPath = jsonValueMatch[1];
-        const rest = jsonValueMatch[2];
-        return `(SELECT TOP 1 JSON_VALUE(value, '$.${existingPath}.${memberName}')${rest}`;
-      } else if (base.startsWith("(SELECT TOP 1 value FROM OPENJSON")) {
-        // Simple value select, add JSON_VALUE
-        // Convert: (SELECT TOP 1 value FROM OPENJSON(...))
-        // To: (SELECT TOP 1 JSON_VALUE(value, '$.member') FROM OPENJSON(...))
-        const fromPart = base.substring(base.indexOf(" FROM "));
-        return `(SELECT TOP 1 JSON_VALUE(value, '$.${memberName}')${fromPart}`;
+    // Handle subquery results from .where() or .extension() functions.
+    // Forms produced by this visitor:
+    //   (SELECT value FROM JSON_TABLE(...) WHERE ...)
+    //   (SELECT JSON_VALUE(value, '$.field') FROM JSON_TABLE(...) WHERE ...)
+    if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
+      const fromPart = base.substring(base.indexOf(" FROM "));
+      return `(SELECT JSON_VALUE(value, '$.${memberName}')${fromPart}`;
+    }
+    if (base.startsWith("(SELECT JSON_VALUE(value, '$.")) {
+      const existingPath = /JSON_VALUE\(value, '\$\.([^']+)'\)/.exec(base)?.[1];
+      if (existingPath) {
+        const rest = base.substring(base.indexOf(" FROM "));
+        return `(SELECT JSON_VALUE(value, '$.${existingPath}.${memberName}')${rest}`;
       }
     }
 
@@ -619,7 +683,6 @@ export class FHIRPathToTSqlVisitor
     isForEachValue: boolean,
   ): boolean {
     const alwaysArrayFields = this.getAlwaysArrayFields();
-    const contextDependentFields = ["name"];
 
     const indexPattern = /\[\d+]/;
     const pathSegments = existingPath
@@ -627,14 +690,14 @@ export class FHIRPathToTSqlVisitor
       .filter((s) => s !== "$" && !indexPattern.exec(s));
     const lastSegment = pathSegments[pathSegments.length - 1];
 
-    const previousFieldIsAlwaysArray =
-      !!lastSegment && alwaysArrayFields.includes(lastSegment);
-    const previousFieldIsContextArray =
-      !!lastSegment &&
-      contextDependentFields.includes(lastSegment) &&
-      !isForEachValue;
+    // Within a forEach iteration the source is already at the element level:
+    // nested array navigation stays on the unindexed path, which the official
+    // suite exercises through the iteration's own JSON_TABLE.
+    if (isForEachValue) {
+      return false;
+    }
 
-    return previousFieldIsAlwaysArray || previousFieldIsContextArray;
+    return !!lastSegment && alwaysArrayFields.includes(lastSegment);
   }
 
   private checkCurrentMemberIsArray(
@@ -770,10 +833,9 @@ export class FHIRPathToTSqlVisitor
     pathParts: string[],
     existingPath: string,
   ): boolean {
-    // Special handling for FHIR array fields
-    // Only add [0] when NOT in a forEach iteration context
-    // In forEach, we're already at the element level, so arrays within elements are accessed directly
-    // Note: "name" is excluded because it's an array at Patient level but an object within Contact
+    // Add [0] only for known FHIR array fields (other than `name`, which is
+    // an object in some contexts), and never in a forEach iteration context
+    // where the field may be the iterated collection itself.
     const knownArrayFields = [
       "telecom",
       "address",
@@ -783,33 +845,16 @@ export class FHIRPathToTSqlVisitor
       "link",
     ];
 
-    // Determine if we should add [0] for this array field
-    // We should NOT add [0] if:
-    // 1. We're in a forEach context AND
-    // 2. The field is actually the forEach collection itself (not a nested array)
-    //
-    // For example:
-    // - forEach on "contact", accessing "name.family": "name" is NOT an array in contact
-    // - forEach on "contact", accessing "telecom.system": "telecom" IS an array in contact, so add [0]
-    // - forEach on "name", accessing "family": we're iterating names, don't add [0] to name itself
-
     if (pathParts.length < 2 || existingPath.includes("[")) {
       return false;
     }
 
-    const fieldName = pathParts[1];
-
-    // Check if this field is in the known array fields list
-    if (knownArrayFields.includes(fieldName)) {
-      // Don't add [0] if this is the forEach array itself
-      return !this.context.forEachPath?.endsWith(fieldName);
-    } else if (fieldName === "name") {
-      // "name" is special: it's an array in Patient but an object in Contact
-      // Only add [0] for "name" when NOT in a forEach context
-      return !this.context.iterationContext;
+    if (this.context.iterationContext) {
+      return false;
     }
 
-    return false;
+    const fieldName = pathParts[1];
+    return knownArrayFields.includes(fieldName);
   }
 
   private handleFunctionInvocation(
@@ -851,13 +896,13 @@ export class FHIRPathToTSqlVisitor
     const newContext = this.createNewIterationContext(base);
 
     // Carry a directly-applied ofType() datatype to the boundary handler so it
-    // picks the right algorithm (research Decision 2).
+    // picks the right algorithm.
     if (functionName === "lowBoundary" || functionName === "highBoundary") {
       newContext.boundaryType =
         this.extractDirectOfTypeName(baseExpr) ?? undefined;
     }
 
-    const visitor = new FHIRPathToTSqlVisitor(newContext);
+    const visitor = new FHIRPathToOracleVisitor(newContext);
     return visitor.executeFunctionHandler(functionName, args);
   }
 
@@ -923,19 +968,19 @@ export class FHIRPathToTSqlVisitor
 
     // Create new context and call the handler
     const newContext = this.createNewIterationContext(base);
-    const visitor = new FHIRPathToTSqlVisitor(newContext);
+    const visitor = new FHIRPathToOracleVisitor(newContext);
     return visitor.handleGetReferenceKeyFunctionWithType(resourceType);
   }
 
   /**
    * Maps polymorphic FHIR fields to their typed variants.
    * Example: value.ofType(integer) → valueInteger
-   * Handles paths with array indices like "output[0].value" → "output[0].valueUrl"
+   * Handles paths with array indices like "output[0].value" → "output[0].valueInteger"
    */
   private applyPolymorphicFieldMapping(base: string, typeName: string): string {
     // Handle SELECT subqueries from extension() function
-    // Pattern: (SELECT TOP 1 JSON_VALUE(value, '$.value') FROM ...)
-    if (base.startsWith("(SELECT TOP 1 JSON_VALUE(value, '$.")) {
+    // Pattern: (SELECT JSON_VALUE(value, '$.value') FROM ...)
+    if (base.startsWith("(SELECT JSON_VALUE(value, '$.")) {
       const suffix = this.getTypeSuffix(typeName);
       // Find the JSON_VALUE path part
       const pathMatch = /JSON_VALUE\(value, '\$\.([^']+)'\)/.exec(base);
@@ -965,7 +1010,7 @@ export class FHIRPathToTSqlVisitor
 
     // Check if this is a known polymorphic field pattern
     if (this.isPolymorphicField(path)) {
-      // Extract the last segment and replace it with the typed variant
+      // Extract the last segment and replace it with its typed variant
       const lastDotIndex = path.lastIndexOf(".");
       if (lastDotIndex === -1) {
         // No dot, so the whole path is the polymorphic field
@@ -1007,15 +1052,10 @@ export class FHIRPathToTSqlVisitor
       unsignedInt: "UnsignedInt",
       integer64: "Integer64",
       // Complex types use PascalCase as they match FHIR type names
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       Period: "Period",
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       Range: "Range",
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       Quantity: "Quantity",
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       CodeableConcept: "CodeableConcept",
-      // eslint-disable-next-line @typescript-eslint/naming-convention
       Reference: "Reference",
     };
 
@@ -1044,7 +1084,7 @@ export class FHIRPathToTSqlVisitor
 
   /**
    * Cast expression to DECIMAL for numeric operations if needed.
-   * JSON_VALUE returns NVARCHAR by default, which can't be used in arithmetic operations.
+   * JSON_VALUE returns text by default, which can't be used in arithmetic operations.
    */
   private castForNumericOperation(expression: string): string {
     // Check if expression contains JSON_VALUE and isn't already wrapped in CAST
@@ -1068,7 +1108,7 @@ export class FHIRPathToTSqlVisitor
 
     // Special case: where() called at resource root level (no collection)
     if (this.isResourceRootLevel(base)) {
-      const filterVisitor = new FHIRPathToTSqlVisitor(this.context);
+      const filterVisitor = new FHIRPathToOracleVisitor(this.context);
       return filterVisitor.visit(filterExprCtx);
     }
 
@@ -1076,7 +1116,7 @@ export class FHIRPathToTSqlVisitor
     const { source, jsonPath } = this.extractSourceAndPath(base);
 
     // Build and return the EXISTS clause with filtered collection
-    return this.buildWhereExistsClause(source, jsonPath, filterExprCtx);
+    return this.buildWhereSubquery(source, jsonPath, filterExprCtx);
   }
 
   /**
@@ -1084,10 +1124,11 @@ export class FHIRPathToTSqlVisitor
    */
   private isResourceRootLevel(base: string): boolean {
     return (
-      base === `${this.context.resourceAlias}.json` ||
+      base === this.rootJson ||
       base === this.context.resourceAlias ||
       (!base.includes("JSON_QUERY") &&
         !base.includes("JSON_VALUE") &&
+        !base.includes("JSON_TABLE") &&
         !base.includes("EXISTS") &&
         !base.includes("SELECT"))
     );
@@ -1100,20 +1141,18 @@ export class FHIRPathToTSqlVisitor
     source: string;
     jsonPath: string;
   } {
-    let source = `${this.context.resourceAlias}.json`;
+    let source = this.rootJson;
     let jsonPath = "$";
 
-    if (base.includes("JSON_QUERY")) {
-      const match = /JSON_QUERY\(([^,]+),\s*'([^']+)'\)/.exec(base);
-      if (match) {
-        source = match[1];
-        jsonPath = match[2];
-      }
-    } else if (base.includes("JSON_VALUE")) {
-      const match = /JSON_VALUE\(([^,]+),\s*'([^']+)'\)/.exec(base);
-      if (match) {
-        source = match[1];
-        jsonPath = match[2];
+    const queryMatch = /JSON_QUERY\(([^,]+),\s*'([^']+)'\)/.exec(base);
+    if (queryMatch) {
+      source = queryMatch[1];
+      jsonPath = queryMatch[2];
+    } else {
+      const valueMatch = /JSON_VALUE\(([^,]+),\s*'([^']+)'\)/.exec(base);
+      if (valueMatch) {
+        source = valueMatch[1];
+        jsonPath = valueMatch[2];
       }
     }
 
@@ -1124,14 +1163,17 @@ export class FHIRPathToTSqlVisitor
    * Builds a subquery for filtering a collection with a where condition.
    * Returns a subquery that selects the filtered items, allowing further navigation.
    */
-  private buildWhereExistsClause(
+  private buildWhereSubquery(
     source: string,
     jsonPath: string,
     filterExprCtx: ExpressionContext,
   ): string {
     const tableAlias = "whereItem";
+    const fmt = formatJsonSuffix(this.storage);
+    const unrolledPath = this.unrollPath(jsonPath);
 
-    // Create a new context for the filter condition where expressions refer to items in the collection
+    // Create a new context for the filter condition where expressions refer to
+    // the JSON_TABLE's `value` column.
     const itemContext: TranspilerContext = {
       resourceAlias: tableAlias,
       constants: this.context.constants,
@@ -1139,12 +1181,28 @@ export class FHIRPathToTSqlVisitor
     };
 
     // Transpile the filter expression with the item context
-    const filterVisitor = new FHIRPathToTSqlVisitor(itemContext);
+    const filterVisitor = new FHIRPathToOracleVisitor(itemContext);
     const condition = filterVisitor.visit(filterExprCtx);
 
-    // Return a subquery that selects the filtered collection
-    // This allows further navigation (e.g., .family) to work correctly
-    return `(SELECT TOP 1 value FROM OPENJSON(${source}, '${jsonPath}') AS ${tableAlias} WHERE ${condition})`;
+    // Return a subquery that selects the filtered collection. ROWNUM limits
+    // the result to the first match without FETCH FIRST, which mis-correlates
+    // in APPLY contexts on 19c (research R4).
+    return `(SELECT value FROM JSON_TABLE(${source}${fmt}, '${unrolledPath}' COLUMNS (${jsonTableColumns(this.storage)})) ${tableAlias} WHERE ${condition} AND ROWNUM = 1)`;
+  }
+
+  /**
+   * Turns a JSON path into an element-unrolling path for JSON_TABLE: `$.a.b`
+   * becomes `$.a.b[*]`; paths already ending in `[*]` or `[n]`, and the root
+   * path `$`, are normalised appropriately.
+   *
+   * @param jsonPath - The base JSON path.
+   * @returns The path unrolled one level.
+   */
+  private unrollPath(jsonPath: string): string {
+    if (jsonPath === "$") {
+      return "$[*]";
+    }
+    return /(\[\*]|\[\d+])$/.test(jsonPath) ? jsonPath : `${jsonPath}[*]`;
   }
 
   private handleExistsFunctionInvocation(
@@ -1200,14 +1258,9 @@ export class FHIRPathToTSqlVisitor
 
       // For non-array fields, first() should return the value as-is since it's already a scalar
       return base;
-    } else if (
-      !base.includes("JSON_VALUE") &&
-      !base.includes("JSON_QUERY") &&
-      !base.includes("EXISTS") &&
-      !base.includes("SELECT")
-    ) {
+    } else if (!base.includes("JSON_VALUE") && !base.includes("JSON_QUERY")) {
       // Simple identifier like 'name'
-      return `JSON_VALUE(${this.context.resourceAlias}.json, '$.${base}[0]')`;
+      return `JSON_VALUE(${this.rootJson}, '$.${base}[0]')`;
     } else {
       // For complex expressions that aren't JSON_QUERY or JSON_VALUE,
       // we can't easily add [0] indexing, so return as-is
@@ -1216,16 +1269,11 @@ export class FHIRPathToTSqlVisitor
   }
 
   private createNewIterationContext(base: string): TranspilerContext {
-    if (
-      !base.includes("JSON_VALUE") &&
-      !base.includes("JSON_QUERY") &&
-      !base.includes("EXISTS") &&
-      !base.includes("SELECT")
-    ) {
+    if (!base.includes("JSON_VALUE") && !base.includes("JSON_QUERY")) {
       // Simple identifier like 'name' - construct proper JSON path
       return {
         ...this.context,
-        iterationContext: `JSON_QUERY(${this.context.resourceAlias}.json, '$.${base}')`,
+        iterationContext: `JSON_QUERY(${this.rootJson}, '$.${base}')`,
       };
     } else {
       return {
@@ -1335,7 +1383,7 @@ export class FHIRPathToTSqlVisitor
     return handler(args);
   }
 
-  // Function handlers (simplified versions of the original implementations)
+  // Function handlers
   private handleExistsFunction(
     args: string[],
     base?: string,
@@ -1343,7 +1391,7 @@ export class FHIRPathToTSqlVisitor
   ): string {
     // If we have a filter expression context, use it (this comes from handleExistsFunctionInvocation)
     if (filterExprCtx) {
-      return this.handleExistsWithArgs("", base, filterExprCtx);
+      return this.handleExistsWithFilter(base, filterExprCtx);
     }
 
     // Otherwise check args
@@ -1351,7 +1399,7 @@ export class FHIRPathToTSqlVisitor
       return this.handleExistsWithoutArgs(base);
     }
 
-    return this.handleExistsWithArgs(args[0], base, filterExprCtx);
+    return this.handleExistsWithArgs(args[0]);
   }
 
   /**
@@ -1363,84 +1411,59 @@ export class FHIRPathToTSqlVisitor
     }
 
     if (this.context.iterationContext) {
-      return this.handleExistsWithIterationContext();
+      // An iteration context is a single element: present unless NULL. (An
+      // empty collection is never an iteration context - iteration unrolls
+      // elements.)
+      return `(${this.context.iterationContext} IS NOT NULL)`;
     }
 
     // No iteration context or base - check resource
-    return `(${this.context.resourceAlias}.json IS NOT NULL)`;
+    return `(${this.rootJson} IS NOT NULL)`;
   }
 
+  /**
+   * Builds the existence predicate for a base expression using JSON_EXISTS
+   * (comparing a JSON_QUERY result to the text '[]' is invalid over a BLOB
+   * column, and a JSON_TABLE cannot consume a JSON_TABLE column). A JSON_QUERY
+   * base is an array: its existence is checked by iterating its elements, so an
+   * empty array does not count as existing; anything else is checked directly.
+   *
+   * @param base - The base expression to check.
+   * @returns A boolean SQL predicate.
+   */
   private handleExistsWithBase(base: string): string {
     const trimmedBase = base.trim();
 
-    // SELECT subquery from .where() function - wrap in EXISTS
+    // Subquery from .where()/.extension() - wrap in EXISTS
     if (trimmedBase.startsWith("(SELECT")) {
       return `EXISTS ${base}`;
     }
 
     // Already a boolean expression - return as-is
-    if (this.isBooleanExpression(base)) {
+    if (this.isBooleanExpression(trimmedBase)) {
       return base;
     }
 
-    // JSON_QUERY (array) - check if not null and not empty. The emptiness
-    // comparison is against the text '[]', so the operand is coerced to
-    // nvarchar: over a native json column JSON_QUERY returns a json-typed value
-    // that cannot be compared to a varchar literal, while over an
-    // NVARCHAR(MAX) column the cast is a no-op.
-    if (base.includes("JSON_QUERY")) {
-      return `(${base} IS NOT NULL AND CAST(${base} AS NVARCHAR(MAX)) != '[]')`;
-    }
-
-    return `(${base} IS NOT NULL)`;
-  }
-
-  private handleExistsWithIterationContext(): string {
-    // This method is only called when iterationContext is defined
-    const iterCtx = this.context.iterationContext;
-    if (!iterCtx) {
-      throw new Error(
-        "handleExistsWithIterationContext called without iteration context",
-      );
-    }
-
-    const trimmedIterCtx = iterCtx.trim();
-
-    // Already an EXISTS clause - return as-is
-    if (trimmedIterCtx.startsWith("EXISTS")) {
-      return iterCtx;
-    }
-
-    // SELECT subquery - wrap in EXISTS
-    if (trimmedIterCtx.startsWith("(SELECT")) {
-      return `EXISTS ${iterCtx}`;
-    }
-
-    // Already a boolean expression - return as-is
-    if (this.isBooleanExpression(trimmedIterCtx)) {
-      return iterCtx;
-    }
-
-    // JSON_QUERY (array) - check if not null and not empty. The operand is cast
-    // to nvarchar so the '[]' comparison is valid on a native json column (a
-    // no-op on NVARCHAR(MAX)).
-    if (trimmedIterCtx.includes("JSON_QUERY")) {
-      return `(${iterCtx} IS NOT NULL AND CAST(${iterCtx} AS NVARCHAR(MAX)) != '[]')`;
-    }
-
-    // Otherwise check if not null
-    return `(${iterCtx} IS NOT NULL)`;
+    const { source, jsonPath } = this.extractSourceAndPath(base);
+    const existsPath = base.includes("JSON_QUERY")
+      ? this.unrollPath(jsonPath)
+      : jsonPath;
+    return `JSON_EXISTS(${source}, '${existsPath}')`;
   }
 
   /**
-   * Builds an EXISTS clause with an OPENJSON subquery for filtering a collection.
+   * Handles exists() with a filter expression: an EXISTS subquery over the
+   * unrolled collection with the filter applied.
    */
-  private buildExistsWithFilter(
-    base: string,
+  private handleExistsWithFilter(
+    base: string | undefined,
     filterExprCtx: ExpressionContext,
   ): string {
-    const { source, jsonPath } = this.extractSourceAndPath(base);
+    const { source, jsonPath } = this.extractSourceAndPath(
+      base ?? this.rootJson,
+    );
     const tableAlias = "existsItem";
+    const fmt = formatJsonSuffix(this.storage);
 
     const itemContext: TranspilerContext = {
       resourceAlias: tableAlias,
@@ -1448,25 +1471,16 @@ export class FHIRPathToTSqlVisitor
       iterationContext: `${tableAlias}.value`,
     };
 
-    const filterVisitor = new FHIRPathToTSqlVisitor(itemContext);
+    const filterVisitor = new FHIRPathToOracleVisitor(itemContext);
     const condition = filterVisitor.visit(filterExprCtx);
 
-    return `EXISTS (SELECT 1 FROM OPENJSON(${source}, '${jsonPath}') AS ${tableAlias} WHERE ${condition})`;
+    return `EXISTS (SELECT 1 FROM JSON_TABLE(${source}${fmt}, '${this.unrollPath(jsonPath)}' COLUMNS (${jsonTableColumns(this.storage)})) ${tableAlias} WHERE ${condition})`;
   }
 
   /**
-   * Handles exists() function with an argument expression.
+   * Handles exists() with a transpiled argument.
    */
-  private handleExistsWithArgs(
-    arg: string,
-    base?: string,
-    filterExprCtx?: ExpressionContext,
-  ): string {
-    // If we have a filter expression context and a base, create an OPENJSON subquery
-    if (filterExprCtx && base) {
-      return this.buildExistsWithFilter(base, filterExprCtx);
-    }
-
+  private handleExistsWithArgs(arg: string): string {
     const trimmedArg = arg.trim();
 
     // If already an EXISTS clause, return as-is
@@ -1484,15 +1498,8 @@ export class FHIRPathToTSqlVisitor
       return arg;
     }
 
-    // If the argument is a JSON_QUERY (array), check if it's not null and not
-    // empty. The operand is cast to nvarchar so the '[]' comparison is valid on
-    // a native json column (a no-op on NVARCHAR(MAX)).
-    if (trimmedArg.includes("JSON_QUERY")) {
-      return `(${arg} IS NOT NULL AND CAST(${arg} AS NVARCHAR(MAX)) != '[]')`;
-    }
-
-    // Otherwise wrap in IS NOT NULL check
-    return `(${arg} IS NOT NULL)`;
+    // Otherwise use a JSON_EXISTS check
+    return this.handleExistsWithBase(arg);
   }
 
   /**
@@ -1523,40 +1530,23 @@ export class FHIRPathToTSqlVisitor
         return `(NOT ${expression})`;
       }
 
-      return `(CASE
-        WHEN ${expression} IS NULL THEN 1
-        WHEN CAST(JSON_QUERY(${expression}) AS NVARCHAR(MAX)) = '[]' THEN 1
-        WHEN JSON_VALUE(${expression}) IS NULL THEN 1
-        ELSE 0
-      END = 1)`;
+      if (this.isBooleanExpression(expression)) {
+        return `(NOT ${expression})`;
+      }
+
+      return `(NOT ${this.handleExistsWithBase(expression)})`;
     }
 
     // No arguments - check current iteration context
     if (this.context.iterationContext) {
-      // If the current iteration context is an EXISTS clause, negate it
-      if (this.context.iterationContext.includes("EXISTS")) {
-        return `(NOT ${this.context.iterationContext})`;
+      const iteration = this.context.iterationContext;
+      if (iteration.includes("EXISTS")) {
+        return `(NOT ${iteration})`;
       }
-
-      if (this.context.iterationContext.includes("JSON_QUERY")) {
-        return `(CASE 
-          WHEN ${this.context.iterationContext} IS NULL THEN 1
-          WHEN CAST(${this.context.iterationContext} AS NVARCHAR(MAX)) = '[]' THEN 1
-          WHEN CAST(${this.context.iterationContext} AS NVARCHAR(MAX)) = 'null' THEN 1
-          ELSE 0 
-        END = 1)`;
-      } else if (this.context.iterationContext.includes("JSON_VALUE")) {
-        return `(CASE WHEN ${this.context.iterationContext} IS NULL THEN 1 ELSE 0 END = 1)`;
-      } else {
-        return `(CASE
-          WHEN JSON_QUERY(${this.context.iterationContext}) IS NULL THEN 1
-          WHEN CAST(JSON_QUERY(${this.context.iterationContext}) AS NVARCHAR(MAX)) = '[]' THEN 1
-          ELSE 0
-        END = 1)`;
-      }
-    } else {
-      return `(CASE WHEN ${this.context.resourceAlias}.json IS NULL THEN 1 ELSE 0 END = 1)`;
+      return `(NOT ${this.handleExistsWithBase(iteration)})`;
     }
+
+    return `(NOT JSON_EXISTS(${this.rootJson}, '$'))`;
   }
 
   private handleFirstFunction(_args: string[]): string {
@@ -1578,7 +1568,7 @@ export class FHIRPathToTSqlVisitor
       }
       return `JSON_VALUE(${this.context.iterationContext}, '$[0]')`;
     } else {
-      return `JSON_VALUE(${this.context.resourceAlias}.json, '$[0]')`;
+      return `JSON_VALUE(${this.rootJson}, '$[0]')`;
     }
   }
 
@@ -1586,18 +1576,18 @@ export class FHIRPathToTSqlVisitor
     const pathExpr =
       args.length > 0
         ? args[0]
-        : (this.context.iterationContext ??
-          `${this.context.resourceAlias}.json`);
-    return `JSON_VALUE(${pathExpr}, '$[last]')`;
+        : (this.context.iterationContext ?? this.rootJson);
+    const { source, jsonPath } = this.extractSourceAndPath(pathExpr);
+    return `JSON_VALUE(${source}, '${jsonPath}[last()]')`;
   }
 
   private handleCountFunction(args: string[]): string {
     const countPath =
       args.length > 0
         ? args[0]
-        : (this.context.iterationContext ??
-          `${this.context.resourceAlias}.json`);
-    return `JSON_ARRAY_LENGTH(${countPath})`;
+        : (this.context.iterationContext ?? this.rootJson);
+    const fmt = formatJsonSuffix(this.storage);
+    return `(SELECT COUNT(*) FROM JSON_TABLE(${countPath}${fmt}, '$[*]' COLUMNS (ord FOR ORDINALITY)))`;
   }
 
   private handleJoinFunction(args: string[]): string {
@@ -1606,11 +1596,12 @@ export class FHIRPathToTSqlVisitor
       separator = args[0];
     }
 
-    const context =
-      this.context.iterationContext ?? `${this.context.resourceAlias}.json`;
+    const context = this.context.iterationContext ?? this.rootJson;
+    const fmt = formatJsonSuffix(this.storage);
 
-    // Check if context is a JSON_QUERY that accesses a nested array path (e.g., '$.name[0].given')
-    // If so, we need to iterate over ALL parent array elements, not just [0]
+    // Check if context is a JSON_QUERY that accesses a nested array path
+    // (e.g. '$.name[0].given'). If so, iterate over ALL parent array elements
+    // and aggregate ALL child array values.
     const nestedArrayMatch =
       /JSON_QUERY\(([^,]+),\s*'(\$\.[^']+)\[0]\.([^']+)'\)/.exec(context);
 
@@ -1619,24 +1610,18 @@ export class FHIRPathToTSqlVisitor
       const parentPath = nestedArrayMatch[2]; // e.g., '$.name'
       const childField = nestedArrayMatch[3]; // e.g., 'given'
 
-      // Iterate over ALL parent array elements and aggregate ALL child array
-      // values. STRING_AGG yields SQL NULL when the grouped set is empty, which
-      // is exactly the FHIRPath contract for join() over an empty collection
-      // (FR-001): "nothing to join" must be NULL, not an empty string. The inner
-      // ISNULL keeps a present-but-null element contributing an empty string so
-      // it does not nullify the whole result (FR-002).
-      return `(SELECT STRING_AGG(ISNULL(childValue.value, ''), ${separator}) WITHIN GROUP (ORDER BY parentItem.[key], childValue.[key])
-              FROM OPENJSON(${source}, '${parentPath}') AS parentItem
-              CROSS APPLY OPENJSON(parentItem.value, '$.${childField}') AS childValue
-              WHERE childValue.type IN (1, 2))`;
+      // LISTAGG yields SQL NULL when the grouped set is empty, which is
+      // exactly the FHIRPath contract for join() over an empty collection.
+      // The NVL keeps a present-but-null element contributing an empty string
+      // so it does not nullify the whole result.
+      return `(SELECT LISTAGG(NVL(child.value, ''), ${separator}) WITHIN GROUP (ORDER BY parent.idx, child.idx)
+        FROM JSON_TABLE(${source}${fmt}, '${parentPath}[*]' COLUMNS (idx FOR ORDINALITY, value CLOB${fmt} PATH '$')) parent
+        CROSS APPLY JSON_TABLE(JSON_QUERY(parent.value${fmt}, '$.${childField}' RETURNING CLOB), '$[*]' COLUMNS (idx FOR ORDINALITY, value VARCHAR2(4000) PATH '$', scalar VARCHAR2(4000) PATH '$')) child)`;
     }
 
-    // Standard join for simple arrays. As above, the empty collection falls
-    // through STRING_AGG as SQL NULL (FR-001) while the inner ISNULL preserves
-    // empty strings for present-but-null elements (FR-002).
-    return `(SELECT STRING_AGG(ISNULL(value, ''), ${separator}) WITHIN GROUP (ORDER BY [key])
-            FROM OPENJSON(${context})
-            WHERE type IN (1, 2))`;
+    // Standard join for simple arrays.
+    return `(SELECT LISTAGG(NVL(value, ''), ${separator}) WITHIN GROUP (ORDER BY idx)
+      FROM JSON_TABLE(${context}${fmt}, '$[*]' COLUMNS (idx FOR ORDINALITY, value VARCHAR2(4000) PATH '$')))`;
   }
 
   private handleWhereFunction(_args: string[]): string {
@@ -1655,11 +1640,11 @@ export class FHIRPathToTSqlVisitor
 
   private handleGetResourceKeyFunction(): string {
     // Returns resourceType/id as the resource key, extracting id from JSON
-    return `CONCAT(${this.context.resourceAlias}.resource_type, '/', JSON_VALUE(${this.context.resourceAlias}.json, '$.id'))`;
+    return `${this.context.resourceAlias}.resource_type || '/' || JSON_VALUE(${this.rootJson}, '$.id')`;
   }
 
   private handleOfTypeFunction(_args: string[]): string {
-    // This should not be called anymore since ofType() is handled specially in handleFunctionInvocation
+    // This should not be called anymore since ofType() is handled specially in handleOfTypeFunctionInvocation
     throw new Error(
       "ofType() function should be handled by handleOfTypeFunctionInvocation",
     );
@@ -1679,17 +1664,13 @@ export class FHIRPathToTSqlVisitor
       let referenceExpr: string;
 
       // Check if it's a JSON_VALUE call - extract just the reference field
-      if (refSource.includes("JSON_VALUE")) {
+      const match = /JSON_VALUE\(([^,]+),\s*'([^']+)'\)/.exec(refSource);
+      if (refSource.includes("JSON_VALUE") && match) {
         // Replace the current path with .reference
-        const match = /JSON_VALUE\(([^,]+),\s*'([^']+)'\)/.exec(refSource);
-        if (match) {
-          const source = match[1];
-          const path = match[2];
-          referenceExpr = `JSON_VALUE(${source}, '${path}.reference')`;
-        } else {
-          // Fallback
-          referenceExpr = `JSON_VALUE(${refSource}, '$.reference')`;
-        }
+        const source = match[1];
+        const path = match[2];
+        const referencePath = this.referenceExtractionPath(path);
+        referenceExpr = `JSON_VALUE(${source}, '${referencePath}')`;
       } else {
         // For simple iteration context like "forEach_0.value"
         referenceExpr = `JSON_VALUE(${refSource}, '$.reference')`;
@@ -1697,7 +1678,7 @@ export class FHIRPathToTSqlVisitor
 
       // If a resource type is specified, only return the reference if it matches
       if (resourceType) {
-        return `IIF(LEFT(${referenceExpr}, ${resourceType.length + 1}) = '${resourceType}/', ${referenceExpr}, NULL)`;
+        return `CASE WHEN SUBSTR(${referenceExpr}, 1, ${resourceType.length + 1}) = '${resourceType}/' THEN ${referenceExpr} END`;
       }
 
       return referenceExpr;
@@ -1705,6 +1686,43 @@ export class FHIRPathToTSqlVisitor
 
     // No iteration context - shouldn't happen for getReferenceKey
     throw new Error("getReferenceKey() requires a Reference object context");
+  }
+
+  /**
+   * Builds the JSON path that extracts the `reference` string from a Reference
+   * at the given path. If the final segment is a multi-valued reference field,
+   * the first element is used (e.g. `$.generalPractitioner` becomes
+   * `$.generalPractitioner[0].reference`).
+   *
+   * @param path - The JSON path to the Reference object.
+   * @returns The JSON path to the `reference` string.
+   */
+  private referenceExtractionPath(path: string): string {
+    if (path.endsWith(".reference")) {
+      return path;
+    }
+    const multiValuedReferenceFields = [
+      "generalPractitioner",
+      "practitioner",
+      "organization",
+      "endpoint",
+      "location",
+      "careTeam",
+      "participant",
+      "performer",
+      "requester",
+      "author",
+      "recipient",
+      "insurer",
+      "serviceRequester",
+    ];
+    const segments = path.split(".");
+    const lastSegment = segments[segments.length - 1];
+    const cleanSegment = lastSegment.replace(/\[\d+]/, "");
+    const needsIndex =
+      !path.includes("[") && multiValuedReferenceFields.includes(cleanSegment);
+    const referenceBase = needsIndex ? `${path}[0]` : path;
+    return `${referenceBase}.reference`;
   }
 
   private handleNotFunction(args: string[]): string {
@@ -1723,39 +1741,37 @@ export class FHIRPathToTSqlVisitor
     }
 
     // extension('url') is equivalent to .extension.where(url = 'url')
-    // Returns the filtered extension object(s) as a JSON_QUERY result
+    // Returns the first matching extension as a JSON value
     const extensionUrl = args[0];
-    const base =
-      this.context.iterationContext ?? `${this.context.resourceAlias}.json`;
+    const base = this.context.iterationContext ?? this.rootJson;
+    const fmt = formatJsonSuffix(this.storage);
 
     // Generate SQL that filters the extension array by URL
-    // Returns the first matching extension as a JSON value
-    return `(SELECT TOP 1 value FROM OPENJSON(${base}, '$.extension') WHERE JSON_VALUE(value, '$.url') = ${extensionUrl})`;
+    return `(SELECT value FROM JSON_TABLE(${base}${fmt}, '$.extension[*]' COLUMNS (${jsonTableColumns(this.storage)})) WHERE JSON_VALUE(value, '$.url') = ${extensionUrl} AND ROWNUM = 1)`;
   }
 
   /**
-   * Generates inline T-SQL for the FHIRPath `lowBoundary()` / `highBoundary()`
+   * Generates inline SQL for the FHIRPath `lowBoundary()` / `highBoundary()`
    * functions. The boundary is the least (low) or greatest (high) value
    * consistent with the input's stated precision, expressed at the maximum
-   * precision for its FHIR datatype (FR-004 to FR-007, FR-010).
+   * precision for its FHIR datatype.
    *
    * The governing datatype is taken from an explicit `ofType()` applied directly
    * to the input where present (`this.context.boundaryType`), otherwise inferred
    * from the value's lexical form at SQL runtime. An absent source element
-   * yields SQL NULL for every branch (FR-009). All logic is emitted inline so
-   * the query stays self-contained, requiring no pre-installed database object
-   * (FR-013).
+   * yields SQL NULL for every branch. All logic is emitted inline so
+   * the query stays self-contained, requiring no pre-installed database object.
    *
    * @param functionName - Either "lowBoundary" or "highBoundary".
    * @param args - Function arguments; a non-empty list is the unsupported
    *   explicit-precision form and is rejected.
-   * @returns A T-SQL scalar expression computing the boundary value.
+   * @returns A SQL scalar expression computing the boundary value.
    * @throws If called with an explicit-precision argument, or resolved (via
-   *   ofType) to a datatype for which boundaries are not supported (FR-008).
+   *   ofType) to a datatype for which boundaries are not supported.
    */
   private handleBoundaryFunction(functionName: string, args: string[]): string {
     // The optional explicit-precision argument is out of scope; reject it with a
-    // clear error rather than silently returning a wrong value (FR-008).
+    // clear error rather than silently returning a wrong value.
     if (args.length > 0) {
       throw new Error(
         `${functionName}() with an explicit precision argument is not supported`,
@@ -1763,8 +1779,7 @@ export class FHIRPathToTSqlVisitor
     }
 
     const isLow = functionName === "lowBoundary";
-    const value =
-      this.context.iterationContext ?? `${this.context.resourceAlias}.json`;
+    const value = this.context.iterationContext ?? this.rootJson;
     const resolved = this.context.boundaryType;
 
     // Datatype known from an explicit ofType() directly on the boundary input.
@@ -1791,42 +1806,42 @@ export class FHIRPathToTSqlVisitor
 
   /**
    * Boundary SQL for a value of unknown datatype, classified from its lexical
-   * form at SQL runtime (research Decision 2): a `T` marks a dateTime, a `:`
-   * marks a time, an interior `-` marks a date, and anything else is treated as
-   * a decimal. NULL propagates to NULL (FR-009).
+   * form at SQL runtime: a `T` marks a dateTime, a `:` marks a time, an
+   * interior `-` marks a date, and anything else is treated as a decimal. NULL
+   * propagates to NULL.
    */
   private lexicalBoundarySql(value: string, isLow: boolean): string {
     // Every branch must yield the same SQL type: a CASE that mixed the string
     // temporal results with the numeric decimal result would have its result
-    // type coerced to the decimal (higher precedence), forcing SQL Server to
+    // type coerced to the numeric (higher precedence), forcing Oracle to
     // convert the temporal strings to numeric and fail. The decimal branch is
     // therefore rendered as text; a decimal column's own cast and the numeric
     // result comparison both accept the textual form.
     return `CASE
       WHEN ${value} IS NULL THEN NULL
-      WHEN CHARINDEX('T', ${value}) > 0 THEN ${this.dateTimeBoundarySql(value, isLow)}
-      WHEN CHARINDEX(':', ${value}) > 0 THEN ${this.timeBoundarySql(value, isLow)}
-      WHEN CHARINDEX('-', ${value}) > 1 THEN ${this.dateBoundarySql(value, isLow)}
-      ELSE CAST(${this.decimalBoundarySql(value, isLow)} AS NVARCHAR(50))
+      WHEN INSTR(${value}, 'T') > 0 THEN ${this.dateTimeBoundarySql(value, isLow)}
+      WHEN INSTR(${value}, ':') > 0 THEN ${this.timeBoundarySql(value, isLow)}
+      WHEN INSTR(${value}, '-') > 1 THEN ${this.dateBoundarySql(value, isLow)}
+      ELSE CAST(${this.decimalBoundarySql(value, isLow)} AS VARCHAR2(50))
     END`;
   }
 
   /**
    * Boundary SQL for a `date` value (maximum precision = day): a partial value
    * is padded to a full date. For `highBoundary`, a year-month resolves to the
-   * last day of the month via EOMONTH (FR-005). NULL propagates to NULL.
+   * last day of the month via LAST_DAY. NULL propagates to NULL.
    */
   private dateBoundarySql(value: string, isLow: boolean): string {
     if (isLow) {
-      return `CASE LEN(${value})
-        WHEN 4 THEN ${value} + '-01-01'
-        WHEN 7 THEN ${value} + '-01'
+      return `CASE LENGTH(${value})
+        WHEN 4 THEN ${value} || '-01-01'
+        WHEN 7 THEN ${value} || '-01'
         ELSE ${value}
       END`;
     }
-    return `CASE LEN(${value})
-      WHEN 4 THEN ${value} + '-12-31'
-      WHEN 7 THEN CONVERT(VARCHAR(10), EOMONTH(CAST(${value} + '-01' AS DATE)), 23)
+    return `CASE LENGTH(${value})
+      WHEN 4 THEN ${value} || '-12-31'
+      WHEN 7 THEN TO_CHAR(LAST_DAY(TO_DATE(${value} || '-01', 'YYYY-MM-DD')), 'YYYY-MM-DD')
       ELSE ${value}
     END`;
   }
@@ -1835,8 +1850,8 @@ export class FHIRPathToTSqlVisitor
    * Boundary SQL for a `dateTime` value (maximum precision = millisecond +
    * timezone). A date-shaped value (no time component) is padded to a full
    * instant filling the minimum components and the FHIR extreme offset `+14:00`
-   * for `lowBoundary`, or the maximum components and `-12:00` for `highBoundary`
-   * (FR-006). A value already carrying a time has its time component padded to
+   * for `lowBoundary`, or the maximum components and `-12:00` for `highBoundary`.
+   * A value already carrying a time has its time component padded to
    * millisecond precision and the extreme offset appended; explicit offsets in
    * such values are not exercised by the suite. NULL propagates to NULL.
    */
@@ -1844,19 +1859,19 @@ export class FHIRPathToTSqlVisitor
     const tz = isLow ? "+14:00" : "-12:00";
     const datePadded = this.dateBoundarySql(value, isLow);
     const timeTail = isLow ? "T00:00:00.000" : "T23:59:59.999";
-    const timePart = `SUBSTRING(${value}, 12, LEN(${value}))`;
+    const timePart = `SUBSTR(${value}, 12)`;
     return `CASE
       WHEN ${value} IS NULL THEN NULL
-      WHEN CHARINDEX('T', ${value}) = 0 THEN (${datePadded}) + '${timeTail}${tz}'
-      ELSE LEFT(${value}, 10) + 'T' + ${this.padTimeComponent(timePart, isLow)} + '${tz}'
+      WHEN INSTR(${value}, 'T') = 0 THEN (${datePadded}) || '${timeTail}${tz}'
+      ELSE SUBSTR(${value}, 1, 10) || 'T' || ${this.padTimeComponent(timePart, isLow)} || '${tz}'
     END`;
   }
 
   /**
    * Boundary SQL for a `time` value (maximum precision = millisecond): the value
    * is padded to `HH:MM:SS.fff`, filling absent components with their minimum
-   * (`:00.000`) for `lowBoundary` or maximum (`:59.999`) for `highBoundary`
-   * (FR-007). NULL propagates to NULL.
+   * (`:00.000`) for `lowBoundary` or maximum (`:59.999`) for `highBoundary`.
+   * NULL propagates to NULL.
    */
   private timeBoundarySql(value: string, isLow: boolean): string {
     return `CASE
@@ -1872,16 +1887,16 @@ export class FHIRPathToTSqlVisitor
   private padTimeComponent(timeExpr: string, isLow: boolean): string {
     const seconds = isLow ? ":00.000" : ":59.999";
     const millis = isLow ? ".000" : ".999";
-    return `CASE LEN(${timeExpr})
-      WHEN 5 THEN ${timeExpr} + '${seconds}'
-      WHEN 8 THEN ${timeExpr} + '${millis}'
+    return `CASE LENGTH(${timeExpr})
+      WHEN 5 THEN ${timeExpr} || '${seconds}'
+      WHEN 8 THEN ${timeExpr} || '${millis}'
       ELSE ${timeExpr}
     END`;
   }
 
   /**
-   * Boundary SQL for a `decimal` value (FR-010). With N fractional digits the
-   * value is known to within half a unit in the last place, so the boundary is
+   * Boundary SQL for a `decimal` value. With N fractional digits the value is
+   * known to within half a unit in the last place, so the boundary is
    * `value ∓ 0.5 × 10⁻ᴺ` (e.g. `1.0` → `0.95` / `1.05`). The half-unit delta is
    * built as a decimal literal from the runtime fractional-digit count to avoid
    * relying on POWER's scale behaviour. NULL propagates to NULL.
@@ -1889,9 +1904,12 @@ export class FHIRPathToTSqlVisitor
   private decimalBoundarySql(value: string, isLow: boolean): string {
     const op = isLow ? "-" : "+";
     // Count the fractional digits present in the lexeme.
-    const fractionDigits = `CASE WHEN CHARINDEX('.', ${value}) = 0 THEN 0 ELSE LEN(${value}) - CHARINDEX('.', ${value}) END`;
-    // Build 0.5 × 10⁻ᴺ as the string '0.' + N zeros + '5', then cast to decimal.
-    const delta = `CAST('0.' + REPLICATE('0', ${fractionDigits}) + '5' AS DECIMAL(38, 18))`;
-    return `CAST(${value} AS DECIMAL(38, 18)) ${op} ${delta}`;
+    const fractionDigits = `CASE WHEN INSTR(${value}, '.') = 0 THEN 0 ELSE LENGTH(${value}) - INSTR(${value}, '.') END`;
+    // Build 0.5 × 10⁻ᴺ as the string '0.' + N zeros + '5', then cast to
+    // NUMBER. `LPAD('5', N + 1, '0')` yields '5', '05', '005', ... so the
+    // concatenation produces 0.5, 0.05, 0.005, ... (avoiding LPAD of a
+    // zero-length pad, which Oracle returns as NULL).
+    const delta = `CAST('0.' || LPAD('5', ${fractionDigits} + 1, '0') AS NUMBER(38, 18))`;
+    return `CAST(${value} AS NUMBER(38, 18)) ${op} ${delta}`;
   }
 }

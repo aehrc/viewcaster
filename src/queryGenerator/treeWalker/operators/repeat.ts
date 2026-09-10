@@ -1,10 +1,10 @@
 /**
- * Walker for Repeat nodes — emits a recursive CTE and returns a set Fragment.
+ * Walker for Repeat nodes - emits a recursive CTE and returns a set Fragment.
  *
- * The CTE projects the current partition keys and any baked scalar columns
- * plus a content-derived `__path` for stable identity across re-evaluations.
- * The Fragment's `fromExtensions` is an INNER JOIN to the CTE on the partition key
- * `[id]`; sibling-level composite-key joins are added by `mergeSiblings`.
+ * The CTE projects the current partition keys and a content-derived `__path`
+ * for stable identity across re-evaluations. The Fragment's `fromExtensions`
+ * is an INNER JOIN to the CTE on the partition keys; sibling-level
+ * composite-key joins are added by `mergeSiblings`.
  *
  * @author John Grimes
  */
@@ -17,7 +17,6 @@ import {
   type Context,
   type Fragment,
   type PartitionKey,
-  SQL_NVARCHAR_MAX,
 } from "../types.js";
 
 export interface RepeatDeps {
@@ -66,15 +65,18 @@ export function walkRepeat(
     throw new Error("walkRepeat: repeat node has empty paths array");
   }
 
-  const tableRef = `[${deps.schemaName}].[${deps.tableName}]`;
+  const tableRef = deps.schemaName
+    ? `${deps.schemaName}.${deps.tableName}`
+    : deps.tableName;
   const cte = buildRepeatCte({
     cteAlias,
     paths,
     source: ctx.source,
-    fromClause: `FROM ${tableRef} AS [${ctx.resourceAlias}]`,
+    fromClause: `FROM ${tableRef} ${ctx.resourceAlias}`,
     ancestorApplies: ctx.ancestorApplies,
     partitionKeys: ctx.partitionKeys,
     resourcePredicate: null, // Resource-level WHERE goes in the outer SELECT.
+    storage: ctx.transpilerCtx.resourceJsonDataType ?? "BLOB",
   });
 
   const joinClause = buildJoinClause(cteAlias, ctx);
@@ -95,14 +97,9 @@ export function walkRepeat(
     partitionKeys: innerCtx.partitionKeys,
   };
 }
-
-/**
- * Outer-SELECT join condition aligning this CTE's rows with the enclosing
- * partition (resource id plus any forEach/repeat keys above this scope).
- */
 function buildJoinClause(cteAlias: string, ctx: Context): string {
   const joinConditions = ctx.partitionKeys
-    .map((k) => `${cteAlias}.[${k.name}] = ${k.sqlExpr}`)
+    .map((k) => `${cteAlias}.${k.name} = ${k.sqlExpr}`)
     .join(" AND ");
   return `\nINNER JOIN ${cteAlias} ON ${joinConditions}`;
 }
@@ -116,7 +113,7 @@ function buildRepeatInnerCtx(
   const newKey: PartitionKey = {
     name: `${cteAlias}_path`,
     sqlExpr: `${cteAlias}.__path`,
-    sqlType: SQL_NVARCHAR_MAX,
+    sqlType: "VARCHAR2(4000)",
   };
   // `%rowIndex` inside a repeat is the 0-based position within the flattened
   // depth-first traversal. The CTE exposes a padded `__order` accumulator whose
