@@ -30,17 +30,19 @@
  * `fhir_resources` dataset in the shared dev schema is never touched.
  */
 
-import { randomBytes } from "crypto";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { randomBytes } from "node:crypto";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import { join } from "node:path";
 import oracledb from "oracledb";
+
 import {
   closeConnectionPool,
   createConnectionPool,
   getDatabaseConfigFromEnv,
 } from "../src/loader/connection.js";
 import { loadNdjsonFiles } from "../src/loader/index.js";
+
 import type {
   DatabaseOptions,
   LoadOptions,
@@ -105,7 +107,6 @@ export interface LoaderIntegrationHarness {
 
 /**
  * Create a loader integration harness.
- *
  * @returns A harness whose lifecycle is driven by connect()/cleanup().
  */
 export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
@@ -172,7 +173,7 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
     const dir = mkdtempSync(join(tmpdir(), "sof-loader-it-"));
     createdDirs.push(dir);
     for (const [name, lines] of Object.entries(files)) {
-      writeFileSync(join(dir, name), lines.join("\n") + "\n", "utf-8");
+      writeFileSync(join(dir, name), lines.join("\n") + "\n", "utf8");
     }
     return dir;
   }

@@ -19,7 +19,6 @@
 
 /**
  * Type definitions for the NDJSON loader.
- *
  * @author John Grimes
  */
 

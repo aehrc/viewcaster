@@ -23,15 +23,17 @@
  * and the resource-type filter.
  */
 
-import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "fs";
-import { tmpdir } from "os";
-import { join } from "path";
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { tmpdir } from "node:os";
+import path from "node:path";
 import { afterEach, describe, expect, it } from "vitest";
+
 import {
   discoverFiles,
   groupFilesByResourceType,
   parseFilename,
 } from "./discovery.js";
+
 import type { LoadOptions } from "./types.js";
 
 let tempDir: string | undefined;
@@ -44,7 +46,6 @@ afterEach(() => {
 /**
  * Write a fixture directory with the given files and return loader options
  * pointing at it.
- *
  * @param files - Map of file name to content.
  * @param extra - Extra loader options.
  * @returns Loader options for the fixture directory.
@@ -53,9 +54,9 @@ function optionsWith(
   files: Record<string, string>,
   extra: Partial<LoadOptions> = {},
 ): LoadOptions {
-  tempDir = mkdtempSync(join(tmpdir(), "sof-discovery-"));
+  tempDir = mkdtempSync(path.join(tmpdir(), "sof-discovery-"));
   for (const [name, content] of Object.entries(files)) {
-    writeFileSync(join(tempDir, name), content, "utf-8");
+    writeFileSync(path.join(tempDir, name), content, "utf8");
   }
   return {
     directory: tempDir,
@@ -72,14 +73,14 @@ describe("discoverFiles", () => {
       "CoverageEligibilityRequest.ndjson": "{}\n",
     });
     const { files } = discoverFiles(options);
-    const types = files.map((file) => file.resourceType).sort();
+    const types = files.map((file) => file.resourceType).sort((a, b) => a.localeCompare(b)) // eslint-disable-line unicorn/no-array-sort -- lib lacks ES2023 toSorted;
     expect(types).toEqual([
       "CoverageEligibilityRequest",
       "Observation",
       "Patient",
     ]);
     const patient = files.find((file) => file.resourceType === "Patient");
-    expect(patient?.path).toBe(join(options.directory, "Patient.ndjson"));
+    expect(patient?.path).toBe(path.join(options.directory, "Patient.ndjson"));
     expect(patient?.size).toBe(6);
   });
 
@@ -92,7 +93,9 @@ describe("discoverFiles", () => {
     });
     const { files, skipped } = discoverFiles(options);
     expect(files.map((file) => file.resourceType)).toEqual(["Patient"]);
-    const skippedNames = skipped.map((entry) => entry.file).sort();
+    const skippedNames = skipped
+      .map((entry) => entry.file)
+      .sort((a, b) => (a < b ? -1 : a > b ? 1 : 0));
     expect(skippedNames).toEqual([
       "Patient.ndjson.bak",
       "README.md",
@@ -105,7 +108,7 @@ describe("discoverFiles", () => {
 
   it("ignores subdirectories", () => {
     const options = optionsWith({});
-    mkdirSync(join(options.directory, "nested"));
+    mkdirSync(path.join(options.directory, "nested"));
     const { files, skipped } = discoverFiles(options);
     expect(files).toEqual([]);
     expect(skipped).toEqual([]);

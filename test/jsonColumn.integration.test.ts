@@ -31,6 +31,7 @@
  */
 
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
+
 import {
   createLoaderIntegrationHarness,
   SAMPLE_PATIENTS,
@@ -79,8 +80,8 @@ describe("loadNdjsonFiles json column type (US2)", () => {
       }>(`SELECT json FROM ${tableName} ORDER BY id`);
       const blobs = queryResult.rows?.map((row) => row.JSON) ?? [];
       expect(blobs).toHaveLength(2);
-      expect(blobs[0].toString("utf-8")).toBe(JSON.stringify(resources[0]));
-      expect(blobs[1].toString("utf-8")).toBe(JSON.stringify(resources[1]));
+      expect(blobs[0].toString("utf8")).toBe(JSON.stringify(resources[0]));
+      expect(blobs[1].toString("utf8")).toBe(JSON.stringify(resources[1]));
     } finally {
       await connection.close();
     }

@@ -3,25 +3,24 @@
 /**
  * CLI for SQL on FHIR tooling.
  * Supports transpiling ViewDefinitions to Oracle SQL.
- *
  * @author John Grimes
  */
 
 import { Command } from "commander";
-import { readFileSync, writeFileSync } from "fs";
+import { readFileSync, writeFileSync } from "node:fs";
+
+import { SqlOnFhir } from "./index.js";
 import { createLoadCommand } from "./load.js";
 import { normaliseResourceJsonDataType } from "./validation.js";
-import { SqlOnFhir } from "./index.js";
 
 /**
  * Read input from stdin or file.
- *
  * @param inputFile - Optional path to read from; stdin when absent.
  * @returns The input text.
  */
 async function readInput(inputFile?: string): Promise<string> {
   if (inputFile) {
-    return readFileSync(inputFile, "utf-8");
+    return readFileSync(inputFile, "utf8");
   }
 
   // Read from stdin.
@@ -29,18 +28,17 @@ async function readInput(inputFile?: string): Promise<string> {
   for await (const chunk of process.stdin) {
     chunks.push(chunk);
   }
-  return Buffer.concat(chunks).toString("utf-8");
+  return Buffer.concat(chunks).toString("utf8");
 }
 
 /**
  * Write output to stdout or file.
- *
  * @param sql - The SQL to write.
  * @param outputFile - Optional path to write to; stdout when absent.
  */
 function writeOutput(sql: string, outputFile?: string): void {
   if (outputFile) {
-    writeFileSync(outputFile, sql, "utf-8");
+    writeFileSync(outputFile, sql, "utf8");
   } else {
     process.stdout.write(sql);
   }
@@ -48,7 +46,6 @@ function writeOutput(sql: string, outputFile?: string): void {
 
 /**
  * Create the transpile command.
- *
  * @returns The configured commander command.
  */
 function createTranspileCommand(): Command {
@@ -116,9 +113,9 @@ function createTranspileCommand(): Command {
           // statement; nothing is written on failure (the write happens after
           // a successful transpile).
           writeOutput(result.sql, options.output);
-        } catch (err) {
+        } catch (error) {
           console.error(
-            `Error: ${err instanceof Error ? err.message : String(err)}`,
+            `Error: ${error instanceof Error ? error.message : String(error)}`,
           );
           process.exit(1);
         }

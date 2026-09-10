@@ -20,11 +20,11 @@
 /**
  * File discovery for NDJSON loader.
  * Scans directories and matches files against configurable patterns.
- *
  * @author John Grimes
  */
-import { readdirSync, statSync } from "fs";
-import { join } from "path";
+import { readdirSync, statSync } from "node:fs";
+import path from "node:path";
+
 import type {
   DiscoveredFile,
   DiscoveryResult,
@@ -43,7 +43,6 @@ const DEFAULT_PATTERN = "{ResourceType}.ndjson";
  * Discover NDJSON files in a directory matching the specified pattern.
  * Files not matching the pattern are skipped and reported (data-model.md:
  * non-matching filenames are skipped with a report).
- *
  * @param options - Loader options containing directory and resource type.
  * @returns Selected files plus a report of skipped files.
  */
@@ -55,7 +54,7 @@ export function discoverFiles(options: LoadOptions): DiscoveryResult {
   const entries = readdirSync(options.directory);
 
   for (const entry of entries) {
-    const filePath = join(options.directory, entry);
+    const filePath = path.join(options.directory, entry);
     const stats = statSync(filePath);
 
     // Skip directories.
@@ -103,7 +102,6 @@ export function discoverFiles(options: LoadOptions): DiscoveryResult {
  *
  * Example:
  * - Pattern: "{ResourceType}.ndjson" matches "Patient.ndjson" -> { resourceType: "Patient" }
- *
  * @param filename - The filename to parse.
  * @param pattern - The pattern to match against.
  * @returns Metadata if the filename matches, undefined otherwise.
@@ -121,7 +119,7 @@ export function parseFilename(
   );
 
   // Escape special regex characters in the pattern (dots, etc.).
-  regexPattern = regexPattern.replaceAll(".", "\\.");
+  regexPattern = regexPattern.replaceAll(".", String.raw`\.`);
 
   // Anchor the pattern to match the entire filename.
   regexPattern = `^${regexPattern}$`;
@@ -146,7 +144,6 @@ export function parseFilename(
 
 /**
  * Group discovered files by resource type.
- *
  * @param files - Array of discovered files.
  * @returns Map of resource type to files.
  */

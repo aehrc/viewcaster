@@ -26,13 +26,14 @@
  * Skips cleanly when no ORACLE_* environment is configured.
  */
 
-import { spawnSync } from "child_process";
+import { spawnSync } from "node:child_process";
 import { afterAll, beforeAll, describe, expect, it, vi } from "vitest";
-import { hasOracleEnvironment } from "./testDatabase.js";
+
 import {
   createLoaderIntegrationHarness,
   SAMPLE_PATIENTS,
 } from "./loaderHarness.js";
+import { hasOracleEnvironment } from "./testDatabase.js";
 import { loadNdjsonFiles } from "../src/loader/index.js";
 
 const harness = createLoaderIntegrationHarness();
@@ -47,7 +48,6 @@ interface Restorable {
 
 /**
  * Silence loader console output for tests that do not assert on it.
- *
  * @returns The spies, for restoration in a finally block.
  */
 function silence(): Restorable[] {
@@ -59,7 +59,6 @@ function silence(): Restorable[] {
 
 /**
  * Restore a set of spies.
- *
  * @param spies - The spies to restore.
  */
 function restore(spies: Restorable[]): void {
@@ -238,7 +237,7 @@ describe("malformed-line handling (data-model.md)", () => {
         "Patient.ndjson": [
           "",
           JSON.stringify(SAMPLE_PATIENTS[0]),
-          "   ",
+          ' '.repeat(3),
           JSON.stringify(SAMPLE_PATIENTS[1]),
           "",
         ],
@@ -353,7 +352,7 @@ describe("exit status through the CLI (US2 scenario 5)", () => {
         "--continue-on-error",
         "--quiet",
       ],
-      { encoding: "utf-8", cwd: process.cwd() },
+      { encoding: "utf8", cwd: process.cwd() },
     );
     expect(result.status).not.toBe(0);
   });
@@ -379,7 +378,7 @@ describe("exit status through the CLI (US2 scenario 5)", () => {
         tableName,
         "--quiet",
       ],
-      { encoding: "utf-8", cwd: process.cwd() },
+      { encoding: "utf8", cwd: process.cwd() },
     );
     expect(result.status).toBe(0);
     expect(await harness.getRowCount(tableName)).toBe(

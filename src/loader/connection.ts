@@ -19,11 +19,11 @@
 
 /**
  * Database connection management for NDJSON loader.
- *
  * @author John Grimes
  */
 
 import oracledb from "oracledb";
+
 import type { DatabaseOptions } from "./types.js";
 
 /**
@@ -38,7 +38,6 @@ const DEFAULT_SERVICE_NAME = "FREEPDB1";
  * Build the connect string for the Oracle driver: an explicit connect string
  * wins; otherwise an EZConnect string is assembled from host, port and
  * service name (research R13).
- *
  * @param config - Database connection configuration.
  * @returns The connect string for `oracledb`.
  */
@@ -60,7 +59,6 @@ export function buildConnectString(
 /**
  * Create a connection pool to the Oracle database. Thin mode (research R2):
  * pure JavaScript, no Instant Client required.
- *
  * @param config - Database connection configuration.
  * @returns Promise that resolves to the connection pool.
  */
@@ -78,7 +76,6 @@ export async function createConnectionPool(
 
 /**
  * Close a connection pool safely.
- *
  * @param pool - The connection pool to close.
  */
 export async function closeConnectionPool(
@@ -93,7 +90,6 @@ export async function closeConnectionPool(
 
 /**
  * Test database connection.
- *
  * @param pool - The connection pool to test.
  * @returns Promise that resolves to true if connection is successful.
  */
@@ -111,7 +107,6 @@ export async function testConnection(pool: oracledb.Pool): Promise<boolean> {
  * Get database connection configuration from environment variables, with
  * `ORACLE_*` fallbacks (research R13). Falls back to provided defaults or
  * throws if required credentials are missing.
- *
  * @param overrides - Optional configuration overrides.
  * @returns Database configuration.
  */

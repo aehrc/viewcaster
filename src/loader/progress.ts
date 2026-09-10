@@ -20,7 +20,6 @@
 /**
  * Progress tracking for NDJSON loader.
  * Provides real-time progress updates and statistics.
- *
  * @author John Grimes
  */
 
@@ -34,7 +33,6 @@ import type {
 
 /**
  * Create a new progress tracker.
- *
  * @param files - Array of files to track.
  * @returns New progress tracker.
  */
@@ -50,7 +48,6 @@ export function createProgressTracker(files: DiscoveredFile[]): LoaderProgress {
 
 /**
  * Initialize progress for a file.
- *
  * @param progress - Progress tracker.
  * @param file - File to initialize.
  */
@@ -68,7 +65,6 @@ export function initializeFileProgress(
 
 /**
  * Update progress for a file.
- *
  * @param progress - Progress tracker.
  * @param filePath - Path to the file.
  * @param rowsLoaded - Number of rows loaded.
@@ -86,7 +82,6 @@ export function updateFileProgress(
 
 /**
  * Mark a file as completed.
- *
  * @param progress - Progress tracker.
  * @param result - File load result.
  */
@@ -109,7 +104,6 @@ export function completeFileProgress(
 
 /**
  * Format progress as a status string.
- *
  * @param progress - Progress tracker.
  * @returns Formatted status string.
  */
@@ -123,7 +117,6 @@ export function formatProgressStatus(progress: LoaderProgress): string {
 
 /**
  * Print verbose progress to console.
- *
  * @param progress - Progress tracker.
  */
 export function printVerboseProgress(progress: LoaderProgress): void {
@@ -148,7 +141,6 @@ export function printVerboseProgress(progress: LoaderProgress): void {
 
 /**
  * Print simple progress line to console (can be overwritten).
- *
  * @param progress - Progress tracker.
  */
 export function printSimpleProgress(progress: LoaderProgress): void {
@@ -158,7 +150,6 @@ export function printSimpleProgress(progress: LoaderProgress): void {
 /**
  * Build the load result from the progress tracker (contracts/api.md
  * `LoadResult`).
- *
  * @param progress - Progress tracker.
  * @returns The load result with one entry per file.
  */
@@ -181,7 +172,6 @@ export function createLoadResult(progress: LoaderProgress): LoadResult {
 
 /**
  * Print a summary of the loading operation.
- *
  * @param result - The load result.
  * @param durationMs - Duration in milliseconds.
  */
@@ -208,7 +198,6 @@ export function printSummary(result: LoadResult, durationMs: number): void {
 
 /**
  * Format duration in human-readable format.
- *
  * @param ms - Duration in milliseconds.
  * @returns Formatted duration string.
  */
@@ -230,7 +219,6 @@ function formatDuration(ms: number): string {
 
 /**
  * Format throughput in rows per second.
- *
  * @param rows - Number of rows.
  * @param ms - Duration in milliseconds.
  * @returns Formatted throughput string.

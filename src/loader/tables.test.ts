@@ -28,6 +28,7 @@
  */
 
 import { describe, expect, it } from "vitest";
+
 import {
   assertNativeJsonSupported,
   buildCreateTableStatements,
@@ -205,17 +206,17 @@ describe("buildJsonTypeMismatchWarning", () => {
 
 describe("assertNativeJsonSupported", () => {
   it("accepts a 21c server version", () => {
-    expect(() => assertNativeJsonSupported(2100000000)).not.toThrow();
+    expect(() => assertNativeJsonSupported(2_100_000_000)).not.toThrow();
   });
 
   it("accepts a 23ai server version", () => {
-    expect(() => assertNativeJsonSupported(2300000000)).not.toThrow();
+    expect(() => assertNativeJsonSupported(2_300_000_000)).not.toThrow();
   });
 
   it("fails fast on 19c, naming the required version and the server version", () => {
     let message = "";
     try {
-      assertNativeJsonSupported(1930000000);
+      assertNativeJsonSupported(1_930_000_000);
     } catch (error) {
       message = (error as Error).message;
     }
@@ -224,7 +225,7 @@ describe("assertNativeJsonSupported", () => {
   });
 
   it("fails fast on any pre-21c version", () => {
-    expect(() => assertNativeJsonSupported(1800000000)).toThrow(/21c/);
-    expect(() => assertNativeJsonSupported(1202000000)).toThrow(/21c/);
+    expect(() => assertNativeJsonSupported(1_800_000_000)).toThrow(/21c/);
+    expect(() => assertNativeJsonSupported(1_202_000_000)).toThrow(/21c/);
   });
 });

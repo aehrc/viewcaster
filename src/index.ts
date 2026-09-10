@@ -1,6 +1,7 @@
 /**
  * SQL on FHIR runner for Oracle Database.
- * Main API for transpiling ViewDefinitions to Oracle SQL queries.
+ * Main API for transpiling ViewDefinitions to Oracle SQL queries and bulk
+ * loading FHIR NDJSON resources.
  *
  * @author John Grimes
  */
@@ -20,7 +21,12 @@ export { QueryGenerator } from "./queryGenerator";
 export type { QueryGeneratorOptions } from "./queryGenerator";
 export { Transpiler } from "./fhirpath/transpiler";
 export type { TranspilerContext } from "./fhirpath/transpiler";
-
+export { loadNdjsonFiles } from "./loader/index.js";
+export type {
+  DatabaseOptions,
+  LoadOptions,
+  LoadResult,
+} from "./loader/types.js";
 
 import { ViewDefinitionParser } from "./parser.js";
 import { QueryGenerator, QueryGeneratorOptions } from "./queryGenerator";
@@ -37,6 +43,12 @@ export type ViewDefinitionInput = ViewDefinition | string | object;
 export class SqlOnFhir {
   private readonly queryGenerator: QueryGenerator;
 
+  /**
+   * Create a transpiler with the given source-table configuration.
+   *
+   * @param options - Table/schema/column names and the JSON storage type the
+   *   generated SQL targets.
+   */
   constructor(options: QueryGeneratorOptions = {}) {
     this.queryGenerator = new QueryGenerator(options);
   }
@@ -51,6 +63,11 @@ export class SqlOnFhir {
    * @param testId - Optional test-isolation identifier. When given, the
    *   generated SQL filters on a `test_id` column, used by the integration
    *   harness to run concurrently against a shared table.
+   * @returns The SQL and ordered column metadata (name, Oracle type,
+   *   nullability).
+   * @example
+   * const result = new SqlOnFhir().transpile(viewDefinition);
+   * console.log(result.sql, result.columns);
    */
   transpile(
     viewDefinition: ViewDefinitionInput,

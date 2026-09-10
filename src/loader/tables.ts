@@ -20,11 +20,11 @@
 /**
  * Table management for NDJSON loader.
  * Creates and manages the single fhir_resources table.
- *
  * @author John Grimes
  */
 
 import oracledb from "oracledb";
+
 import {
   type ResourceJsonDataType,
   validateOracleIdentifier,
@@ -51,7 +51,6 @@ export interface CreateTableStatements {
  * Qualify a table name with its schema when a schema is given. Identifiers
  * are emitted unquoted (research R7) and must have been validated by the
  * caller.
- *
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Table name.
  * @returns The qualified table name.
@@ -72,7 +71,6 @@ function qualifyTableName(
  * ResourceJsonDataType}; with the default `BLOB` variant the column carries
  * an `IS JSON` check constraint. Identifiers are assumed to have been
  * validated by the caller (see {@link createTable}).
- *
  * @param schemaName - Schema name (already validated), or undefined for the
  *   current schema.
  * @param tableName - Table name (already validated).
@@ -110,7 +108,6 @@ export function buildCreateTableStatements(
  * Length-bearing types are shown with their declared character length; types
  * reported without a length (such as `BLOB`, `CLOB` or the native `JSON`
  * type) are shown as the bare type name.
- *
  * @param dataType - The ALL_TAB_COLUMNS DATA_TYPE.
  * @param charLength - The ALL_TAB_COLUMNS CHAR_LENGTH, when non-zero.
  * @returns A readable type such as `VARCHAR2(255)`, `CLOB` or `JSON`.
@@ -135,7 +132,6 @@ function formatColumnType(dataType: string, charLength?: number | null): string 
  * write into a column that cannot hold the data, surfacing later as a
  * data-dependent error. Failing fast turns that late failure into an early,
  * actionable configuration error.
- *
  * @param dataType - The ALL_TAB_COLUMNS DATA_TYPE.
  * @param charLength - The ALL_TAB_COLUMNS CHAR_LENGTH, when non-zero.
  * @returns The canonical resource json data type (`BLOB` or `JSON`).
@@ -165,7 +161,6 @@ export function resolveColumnJsonDataType(
  * Build a warning for an existing table whose json column type differs from
  * the requested type (data-model.md lifecycle: warn naming both types and
  * load into the existing table unchanged).
- *
  * @param schemaName - Schema name.
  * @param tableName - Table name.
  * @param existingType - The table's current json column type.
@@ -192,7 +187,6 @@ export function buildJsonTypeMismatchWarning(
 /**
  * Fail fast when native JSON storage is requested from a pre-21c database
  * (FR-014, data-model.md lifecycle).
- *
  * @param serverVersion - The database's `oracleServerVersion` (e.g.
  *   1900000000 for 19c).
  * @throws Error naming the required version and the server's version.
@@ -213,7 +207,6 @@ export function assertNativeJsonSupported(serverVersion: number): void {
  * Validate identifiers to prevent SQL injection before they are interpolated
  * into DDL. The json type is already a canonical, allowlisted value, so it
  * carries no injection risk.
- *
  * @param schemaName - Schema name, when given.
  * @param tableName - Table name.
  */
@@ -229,7 +222,6 @@ function validateIdentifiers(
 
 /**
  * Check if a table exists in the database.
- *
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to check.
@@ -249,7 +241,7 @@ export async function tableExists(
          WHERE table_name = :tableName`,
         [tableName.toUpperCase()],
       );
-      const row = result.rows?.[0] as { N: number } | undefined;
+      const row = result.rows?.[0] as { N: number } | undefined; // eslint-disable-line @typescript-eslint/naming-convention
       return (row?.N ?? 0) > 0;
     }
     const result = await connection.execute(
@@ -258,7 +250,7 @@ export async function tableExists(
        WHERE owner = :owner AND table_name = :tableName`,
       [schemaName.toUpperCase(), tableName.toUpperCase()],
     );
-    const row = result.rows?.[0] as { N: number } | undefined;
+    const row = result.rows?.[0] as { N: number } | undefined; // eslint-disable-line @typescript-eslint/naming-convention
     return (row?.N ?? 0) > 0;
   } finally {
     await connection.close();
@@ -267,7 +259,6 @@ export async function tableExists(
 
 /**
  * Read the effective json column type for an existing table.
- *
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.
@@ -283,25 +274,21 @@ export async function getExistingJsonColumnType(
 ): Promise<ResourceJsonDataType | null> {
   const connection = await pool.getConnection();
   try {
-    let result: oracledb.Result<unknown>;
-    if (schemaName === undefined) {
-      result = await connection.execute(
-        `SELECT data_type, char_length
-         FROM user_tab_columns
-         WHERE table_name = :tableName AND column_name = 'JSON'`,
-        [tableName.toUpperCase()],
-      );
-    } else {
-      result = await connection.execute(
-        `SELECT data_type, char_length
-         FROM all_tab_columns
-         WHERE owner = :owner AND table_name = :tableName
-           AND column_name = 'JSON'`,
-        [schemaName.toUpperCase(), tableName.toUpperCase()],
-      );
-    }
-
+    const result = await (schemaName === undefined
+      ? connection.execute(
+          `SELECT data_type, char_length
+           FROM user_tab_columns
+           WHERE table_name = :tableName AND column_name = 'JSON'`,
+          [tableName.toUpperCase()],
+        )
+      : connection.execute(
+          `SELECT data_type, char_length
+           FROM all_tab_columns
+           WHERE owner = :owner AND table_name = :tableName
+             AND column_name = 'JSON'`,
+        ));
     const row = result.rows?.[0] as
+      // eslint-disable-next-line @typescript-eslint/naming-convention -- ALL_TAB_COLUMNS columns are upper case.
       | { DATA_TYPE: string; CHAR_LENGTH: number }
       | undefined;
     if (!row) {
@@ -324,7 +311,6 @@ export async function getExistingJsonColumnType(
  * An existing column that is neither the BLOB variant nor native `JSON`
  * cannot hold a serialised FHIR resource, so it is rejected outright rather
  * than warned about: the error is raised here before any rows are loaded.
- *
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.
@@ -362,7 +348,6 @@ export async function warnIfJsonTypeMismatch(
 /**
  * Fail fast when native JSON storage is requested but the database does not
  * support it (FR-014). Reads the server version from a pooled connection.
- *
  * @param pool - Database connection pool.
  * @throws Error when the server is pre-21c; see {@link
  *   assertNativeJsonSupported}.
@@ -381,7 +366,6 @@ export async function ensureNativeJsonSupported(
 /**
  * Create the resources table with an index on resource_type (DDL per
  * data-model.md).
- *
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to create.
@@ -413,7 +397,6 @@ export async function createTable(
 
 /**
  * Truncate a table (remove all rows).
- *
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to truncate.
@@ -442,10 +425,9 @@ export async function truncateTable(
  * When the table already exists it is never altered; the requested `json`
  * column type only governs creation of a new table. An existing table with the
  * other supported storage type yields a warning naming both types, and the
- * *existing* column type is returned so rows are bound in a form the column
+ * existing* column type is returned so rows are bound in a form the column
  * accepts. The native-JSON version gate (FR-014) fires only when a new table
  * would actually be created as JSON.
- *
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.

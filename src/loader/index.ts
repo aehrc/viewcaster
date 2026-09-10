@@ -20,13 +20,13 @@
 /**
  * Main orchestration for NDJSON loader.
  * Coordinates file discovery, table management, and loading operations.
- *
  * @author John Grimes
  */
 
-import { createReadStream } from "fs";
-import { createInterface } from "readline";
+import { createReadStream } from "node:fs";
+import { createInterface } from "node:readline";
 import oracledb from "oracledb";
+
 import {
   normaliseResourceJsonDataType,
   type ResourceJsonDataType,
@@ -38,12 +38,6 @@ import {
 } from "./connection.js";
 import { discoverFiles, groupFilesByResourceType } from "./discovery.js";
 import {
-  buildJsonTypeMismatchWarning,
-  ensureTable,
-  getExistingJsonColumnType,
-} from "./tables.js";
-import { loadFile } from "./stream.js";
-import {
   completeFileProgress,
   createLoadResult,
   createProgressTracker,
@@ -53,6 +47,13 @@ import {
   printVerboseProgress,
   updateFileProgress,
 } from "./progress.js";
+import { loadFile } from "./stream.js";
+import {
+  buildJsonTypeMismatchWarning,
+  ensureTable,
+  getExistingJsonColumnType,
+} from "./tables.js";
+
 import type {
   DiscoveredFile,
   LoadOptions,
@@ -69,7 +70,6 @@ const DEFAULT_JSON_TYPE: ResourceJsonDataType = "BLOB";
 
 /**
  * Discover and log files to be loaded.
- *
  * @param options - Loader options.
  * @returns Discovered files.
  */
@@ -115,12 +115,11 @@ function discoverAndLogFiles(options: LoadOptions): DiscoveredFile[] {
  * Count the loadable (non-blank) lines of an NDJSON file, for dry-run
  * reporting. The loader does not parse resources beyond JSON well-formedness,
  * so the dry run only counts non-blank lines.
- *
  * @param file - The file to count.
  * @returns The number of non-blank lines.
  */
 async function countNdjsonLines(file: DiscoveredFile): Promise<number> {
-  const fileStream = createReadStream(file.path, { encoding: "utf-8" });
+  const fileStream = createReadStream(file.path, { encoding: "utf8" });
   const rl = createInterface({
     input: fileStream,
     crlfDelay: Infinity,
@@ -139,9 +138,10 @@ async function countNdjsonLines(file: DiscoveredFile): Promise<number> {
  *
  * @param pool - Database connection pool.
  * @param options - Loader options.
- * @param jsonType - Resolved storage type.
- * @returns Table schema and name.
+ * @param jsonType - Requested storage type.
+ * @returns Table schema, name and the effective storage type to load with.
  */
+// eslint-disable-next-line max-lines-per-function -- Table preparation covers both creation and validation paths.
 async function prepareTable(
   pool: oracledb.Pool,
   options: LoadOptions,
@@ -155,20 +155,7 @@ async function prepareTable(
   const tableName = options.tableName ?? "fhir_resources";
 
   let effective: ResourceJsonDataType;
-  if (options.createTable !== false) {
-    if (options.verbose) {
-      console.log(
-        `Ensuring table ${schemaName ? `${schemaName}.` : ""}${tableName} exists as ${jsonType}${options.truncate ? " (will truncate)" : ""}...`,
-      );
-    }
-    effective = await ensureTable(
-      pool,
-      schemaName,
-      tableName,
-      options.truncate ?? false,
-      jsonType,
-    );
-  } else {
+  if (options.createTable === false) {
     // Table creation is disabled: an absent table is an error, and an
     // existing table's own column type governs the binds.
     const existingType = await getExistingJsonColumnType(
@@ -191,6 +178,19 @@ async function prepareTable(
       console.warn(warning);
     }
     effective = existingType;
+  } else {
+    if (options.verbose) {
+      console.log(
+        `Ensuring table ${schemaName ? `${schemaName}.` : ""}${tableName} exists as ${jsonType}${options.truncate ? " (will truncate)" : ""}...`,
+      );
+    }
+    effective = await ensureTable(
+      pool,
+      schemaName,
+      tableName,
+      options.truncate ?? false,
+      jsonType,
+    );
   }
 
   return { schemaName, tableName, jsonType: effective };
@@ -207,6 +207,7 @@ async function prepareTable(
  * @param jsonType - Resolved storage type.
  * @param progress - Progress tracker.
  */
+// eslint-disable-next-line max-lines-per-function -- Chunking and per-file progress accounting.
 async function loadFilesInChunks(
   pool: oracledb.Pool,
   files: DiscoveredFile[],
@@ -262,7 +263,6 @@ async function loadFilesInChunks(
 
 /**
  * Report the files that would be loaded without touching the database.
- *
  * @param files - Discovered files.
  * @param options - Loader options.
  * @returns The load result, with counts per file.
@@ -299,7 +299,6 @@ async function performDryRun(
 
 /**
  * Perform the actual loading process.
- *
  * @param pool - Database connection pool.
  * @param files - Files to load.
  * @param options - Loader options.
@@ -353,7 +352,6 @@ async function performLoad(
 
 /**
  * Load NDJSON files from a directory into Oracle Database.
- *
  * @param options - Loader options.
  * @returns Promise that resolves to the load result.
  */
