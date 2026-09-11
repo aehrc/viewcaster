@@ -414,6 +414,27 @@ function resolveSuiteFiles(testPath: string): string[] {
     .map((file) => join(testPath, file));
 }
 
+/**
+ * Cases that cannot be satisfied when the resource is held in Oracle's native
+ * JSON type, keyed as `<suite file>:<test title>`.
+ *
+ * The native type encodes a number into Oracle's binary JSON format on the way
+ * in, which normalises its lexical form:
+ *
+ * ```sql
+ * INSERT INTO t (j) VALUES ('{"v":1.0}');   -- j is of type JSON
+ * SELECT JSON_SERIALIZE(j) FROM t;          -- {"v":1}
+ * ```
+ *
+ * A boundary is defined by the precision of the input as written, so once the
+ * trailing zero is gone the answer is unrecoverable, by any query. With BLOB
+ * storage the document is held as written and these cases pass.
+ */
+const UNSUPPORTED_UNDER_NATIVE_JSON: Record<string, true> = {
+  "fn_boundary.json:decimal lowBoundary": true,
+  "fn_boundary.json:decimal highBoundary": true,
+};
+
 const testPath = process.env.SQLONFHIR_TEST_PATH ?? "./sqlonfhir/tests";
 
 describe.skipIf(!hasOracleEnvironment())(
@@ -442,7 +463,27 @@ describe.skipIf(!hasOracleEnvironment())(
         });
 
         for (const testCase of suite.tests) {
-          it.concurrent(testCase.title, async () => {
+          // Oracle's native JSON type normalises a number as it is encoded, so
+          // `1.0` is stored as `1` and JSON_SERIALIZE returns it as `1`. A
+          // boundary is defined by the precision of the input as written, so
+          // these cases have no answer under that storage type: the
+          // information is gone before any query runs. They are reported as
+          // unsupported rather than silently passing.
+          const unsupported =
+            storage === "JSON" &&
+            UNSUPPORTED_UNDER_NATIVE_JSON[`${fileName}:${testCase.title}`] ===
+              true;
+          if (unsupported) {
+            suiteResults.push({
+              name: testCase.title,
+              result: {
+                passed: false,
+                error:
+                  "Not supported with the native JSON storage type: it normalises the decimal, discarding the precision a boundary is defined by",
+              },
+            });
+          }
+          it.skipIf(unsupported).concurrent(testCase.title, async () => {
             const entry: TestReportEntry = {
               name: testCase.title,
               result: { passed: true },

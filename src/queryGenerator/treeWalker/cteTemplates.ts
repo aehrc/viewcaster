@@ -114,7 +114,7 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
     return `${inScope ? k.sqlExpr : `${spine.baseAlias}.${k.name}`} AS ${k.name}`;
   });
   const carriedLines = (args.carried ?? []).map(
-    (c) => `${c.sqlExpr} AS ${c.name}`,
+    (c) => `${materialiseValueLob(c.sqlExpr)} AS ${c.name}`,
   );
   const projLines = [...keyLines, ...carriedLines].join(",\n    ");
   const chain = buildJsonTableChain(source, paths[0], "anchor", storage);
@@ -131,19 +131,55 @@ function buildAnchorMember(args: BuildRepeatCteArgs): string {
   ${chain.applyClauses}${wherePart}`;
 }
 
+/**
+ * Forces a JSON_TABLE column to materialise as an ordinary temporary CLOB.
+ *
+ * A CLOB column produced by JSON_TABLE is a "value LOB", which Oracle 21c
+ * treats as a distinct kind of operand. Carrying one through a recursive CTE
+ * puts a value LOB in the anchor against the CTE's own materialised column in
+ * the recursive member, and 21c rejects the mismatched pair with `ORA-65513:
+ * value LOB operand mismatch for SQL operator`. Taking a substring of the
+ * whole value produces a plain temporary CLOB, so both branches agree.
+ * Anything that is not a JSON_TABLE value column is already materialised and
+ * is left alone.
+ * @param sqlExpr - The carried column's source expression.
+ * @returns The expression, materialised if it needed to be.
+ */
+function materialiseValueLob(sqlExpr: string): string {
+  return /\.value$/.test(sqlExpr) ? `SUBSTR(${sqlExpr}, 1)` : sqlExpr;
+}
+
+/**
+ * Builds the recursive member: one row per element of any of the repeat's
+ * paths, found beneath the previous level's `item_json`.
+ *
+ * The paths are expanded as sibling `NESTED PATH` clauses of a single
+ * JSON_TABLE rather than as a `UNION ALL` of one JSON_TABLE per path. Sibling
+ * nested paths already have the semantics wanted here, a row per match of
+ * either path with the other path's columns NULL, and they avoid a set
+ * operator over the CLOB that JSON_TABLE produces, which Oracle 21c rejects
+ * with `ORA-65513: value LOB operand mismatch for SQL operator`. A row where
+ * no path matched carries a NULL ordinality and is discarded.
+ * @param args - The repeat CTE arguments.
+ * @returns The recursive member SELECT.
+ */
 function buildRecursiveMember(args: BuildRepeatCteArgs): string {
   const { cteAlias, partitionKeys, storage, paths } = args;
   const head = qualifiedKeyCols("cte", partitionKeys);
   const carried = (args.carried ?? []).map((c) => `cte.${c.name}`).join(", ");
   const carriedPart = carried ? `,\n    ${carried}` : "";
   const fmt = storage === "BLOB" ? " FORMAT JSON" : "";
-  const chains = paths
+  const nested = paths
     .map(
-      (path) =>
-        `      SELECT child.value AS v, child.idx AS idx, child.scalar AS scalar
-        FROM JSON_TABLE(cte.item_json${fmt}, '$.${path}[*]' COLUMNS (idx FOR ORDINALITY, value CLOB FORMAT JSON PATH '$', scalar VARCHAR2(4000) PATH '$')) child`,
+      (path, i) =>
+        `        NESTED PATH '$.${path}[*]' COLUMNS (idx_${i} FOR ORDINALITY, value_${i} CLOB FORMAT JSON PATH '$', scalar_${i} VARCHAR2(4000) PATH '$')`,
     )
-    .join("\n      UNION ALL\n");
+    .join(",\n");
+  // With a single path the COALESCE would be a no-op, so it is omitted.
+  const firstNonNull = (column: string): string =>
+    paths.length === 1
+      ? `jt.${column}_0`
+      : `COALESCE(${paths.map((_, i) => `jt.${column}_${i}`).join(", ")})`;
   return `  SELECT
     ${head}${carriedPart},
     cte.elem_path || '.' || CAST(u.idx AS VARCHAR2(4000)) AS elem_path,
@@ -153,7 +189,11 @@ function buildRecursiveMember(args: BuildRepeatCteArgs): string {
     cte.depth + 1
   FROM ${cteAlias} cte
   CROSS APPLY (
-${chains}
+      SELECT ${firstNonNull("value")} AS v, ${firstNonNull("idx")} AS idx, ${firstNonNull("scalar")} AS scalar
+        FROM JSON_TABLE(cte.item_json${fmt}, '$' COLUMNS (
+${nested}
+        )) jt
+       WHERE ${firstNonNull("idx")} IS NOT NULL
   ) u`;
 }
 

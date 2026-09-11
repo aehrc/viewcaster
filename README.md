@@ -211,10 +211,16 @@ names (case included) are preserved.
 - **4,000-byte scalar limit (19c).** On the default storage mode, individual
   scalar values extracted by a view are limited to 4,000 bytes (`JSON_VALUE
 RETURNING VARCHAR2(4000)`); resources themselves are unlimited.
-- **Decimal lexical forms.** Oracle normalises JSON numbers on extraction
-  (lexical `1.0` returns as `1`); the default `VARCHAR2` decimal mapping
-  therefore returns the normalised form on versions whose extraction cannot
-  return the raw lexical form.
+- **Decimal lexical forms.** Oracle normalises a JSON number on extraction, so
+  a lexical `1.0` comes back from `JSON_VALUE` as `1`, and the default
+  `VARCHAR2` decimal mapping returns that normalised form. Where the original
+  precision is what is being asked for, as in `lowBoundary()` and
+  `highBoundary()`, the value is read with `JSON_QUERY` instead, which returns
+  the source text. That works only under `BLOB` storage, where the document is
+  held as written. The native `JSON` type normalises the number as it encodes
+  it, so `{"v":1.0}` is stored as `{"v":1}` and the precision is gone before
+  any query runs: under that storage type a decimal boundary is
+  unrecoverable.
 - **Identifiers.** Table, schema and base-column names are unquoted (folded
   to upper case by Oracle); output column aliases are double-quoted, so
   ViewDefinition column names keep their exact case.
