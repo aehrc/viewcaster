@@ -1,0 +1,54 @@
+# Copyright © 2026, Commonwealth Scientific and Industrial Research
+# Organisation (CSIRO) ABN 41 687 119 230.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# Author: John Grimes
+
+name: Free disk space
+description: >-
+  Moves the Docker data root onto the runner's large temporary disk, so that
+  multi-gigabyte database images can be pulled without exhausting the root
+  filesystem.
+
+runs:
+  using: composite
+  steps:
+    - name: Move the Docker data root to /mnt
+      shell: bash
+      run: |
+        echo "Disk usage before:"
+        df -h / /mnt
+
+        # A GitHub-hosted runner has roughly 14 GB free on the root filesystem,
+        # which is less than the Oracle 23ai Free image needs (about 13 GB),
+        # and too little for the 21c XE container to write its redo logs. /mnt
+        # is a separate disk with far more room, so Docker is pointed at it
+        # before any image is pulled. The preloaded images are discarded rather
+        # than copied across, as none of them are used here.
+        sudo systemctl stop docker.service docker.socket
+        sudo rm -rf /var/lib/docker
+        sudo mkdir -p /mnt/docker /etc/docker
+
+        if [ -f /etc/docker/daemon.json ]; then
+          jq '."data-root" = "/mnt/docker"' /etc/docker/daemon.json > "${RUNNER_TEMP}/daemon.json"
+        else
+          echo '{"data-root": "/mnt/docker"}' > "${RUNNER_TEMP}/daemon.json"
+        fi
+        sudo mv "${RUNNER_TEMP}/daemon.json" /etc/docker/daemon.json
+
+        sudo systemctl start docker.service
+        docker info --format 'Docker data root: {{ .DockerRootDir }}'
+
+        echo "Disk usage after:"
+        df -h / /mnt

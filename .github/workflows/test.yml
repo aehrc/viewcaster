@@ -3,6 +3,7 @@ name: Build and test
 on:
   push:
   pull_request:
+  workflow_call:
 
 env:
   SQLONFHIR_TEST_PATH: ./sqlonfhir/tests
@@ -11,6 +12,10 @@ env:
   ORACLE_USER: fhir
   ORACLE_PASSWORD: fhir
 
+# The database runs as an explicitly started container rather than as a job
+# service, because a service is started before the first step runs, and the
+# runner's root filesystem has too little free space to hold these images. The
+# free-disk-space action has to run first.
 jobs:
   # Oracle Database 19c Enterprise Edition. The image is a private, self-built
   # package (Oracle Technology Network Developer Licence), pulled with the
@@ -23,29 +28,6 @@ jobs:
     permissions:
       contents: read
       packages: read
-    services:
-      oracle:
-        image: ghcr.io/aehrc/oracle-database-ee:19.3.0
-        credentials:
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-        env:
-          ORACLE_SID: ORCLCDB
-          ORACLE_PDB: ORCLPDB1
-          ORACLE_PWD: oracle
-          ORACLE_CHARACTERSET: AL32UTF8
-          INIT_SGA_SIZE: "1536"
-          INIT_PGA_SIZE: "512"
-          INIT_CPU_COUNT: "2"
-        ports:
-          - 1521:1521
-        options: >-
-          --shm-size=1g
-          --health-cmd "/opt/oracle/checkDBStatus.sh"
-          --health-interval 30s
-          --health-timeout 15s
-          --health-retries 60
-          --health-start-period 30m
     env:
       ORACLE_SERVICE_NAME: ORCLPDB1
       ORACLE_RESOURCE_JSON_DATA_TYPE: BLOB
@@ -54,6 +36,25 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Free disk space
+        uses: ./.github/actions/free-disk-space
+
+      - name: Start Oracle
+        uses: ./.github/actions/start-oracle
+        with:
+          image: ghcr.io/aehrc/oracle-database-ee:19.3.0
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+          environment: |
+            ORACLE_SID=ORCLCDB
+            ORACLE_PDB=ORCLPDB1
+            ORACLE_PWD=oracle
+            ORACLE_CHARACTERSET=AL32UTF8
+            INIT_SGA_SIZE=1536
+            INIT_PGA_SIZE=512
+            INIT_CPU_COUNT=2
 
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
@@ -72,13 +73,20 @@ jobs:
       - name: Check formatting
         run: bun run format:check
 
+      - name: Wait for Oracle
+        uses: ./.github/actions/wait-for-oracle
+
       - name: Create application user
         run: >-
-          sed "s/FREEPDB1/ORCLPDB1/" docker/init/01_create_user.sql
-          | docker exec -i ${{ job.services.oracle.id }} sqlplus -s / as sysdba
+          sed "s/FREEPDB1/${ORACLE_SERVICE_NAME}/" docker/init/01_create_user.sql
+          | docker exec -i oracle sqlplus -s / as sysdba
 
       - name: Run tests
         run: bun run test
+
+      - name: Dump database log
+        if: failure()
+        run: docker logs --tail 200 oracle
 
       - name: Upload test report artifact
         if: always()
@@ -118,21 +126,6 @@ jobs:
             service-name: FREEPDB1
             resource-json-data-type: JSON
             report-suffix: 23ai-json
-    services:
-      oracle:
-        image: ${{ matrix.image }}
-        env:
-          ORACLE_PWD: oracle
-          ORACLE_CHARACTERSET: AL32UTF8
-        ports:
-          - 1521:1521
-        options: >-
-          --shm-size=1g
-          --health-cmd "/opt/oracle/checkDBStatus.sh"
-          --health-interval 30s
-          --health-timeout 15s
-          --health-retries 40
-          --health-start-period 10m
     env:
       ORACLE_SERVICE_NAME: ${{ matrix.service-name }}
       ORACLE_RESOURCE_JSON_DATA_TYPE: ${{ matrix.resource-json-data-type }}
@@ -141,6 +134,17 @@ jobs:
         uses: actions/checkout@v4
         with:
           submodules: recursive
+
+      - name: Free disk space
+        uses: ./.github/actions/free-disk-space
+
+      - name: Start Oracle
+        uses: ./.github/actions/start-oracle
+        with:
+          image: ${{ matrix.image }}
+          environment: |
+            ORACLE_PWD=oracle
+            ORACLE_CHARACTERSET=AL32UTF8
 
       - name: Set up bun
         uses: oven-sh/setup-bun@v2
@@ -153,14 +157,20 @@ jobs:
       - name: Build project
         run: bun run build
 
+      - name: Wait for Oracle
+        uses: ./.github/actions/wait-for-oracle
+
       - name: Create application user
         run: >-
-          sed "s/FREEPDB1/${{ matrix.service-name }}/"
-          docker/init/01_create_user.sql
-          | docker exec -i ${{ job.services.oracle.id }} sqlplus -s / as sysdba
+          sed "s/FREEPDB1/${ORACLE_SERVICE_NAME}/" docker/init/01_create_user.sql
+          | docker exec -i oracle sqlplus -s / as sysdba
 
       - name: Run tests
         run: bun run test
+
+      - name: Dump database log
+        if: failure()
+        run: docker logs --tail 200 oracle
 
       - name: Upload test report artifact
         if: always()

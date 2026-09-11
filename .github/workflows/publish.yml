@@ -6,125 +6,15 @@ on:
     types: [published]
 
 jobs:
+  # The full Oracle matrix is defined once, in the test workflow, and reused
+  # here so that a release cannot be published against a different set of
+  # checks from the ones that run on every push.
   test:
     name: Build and test
-    runs-on: ubuntu-latest
-    strategy:
-      fail-fast: false
-      matrix:
-        include:
-          # Oracle 19c EE supports BLOB storage only (the self-built image is
-          # pulled with the workflow GITHUB_TOKEN, which requires read access
-          # to the private aehrc package; fork PRs skip this job).
-          - oracle-version: "19c-ee"
-            image: "ghcr.io/aehrc/oracle-database-ee:19.3.0"
-            service-name: ORCLPDB1
-            resource-json-data-type: "BLOB"
-            report-suffix: ""
-            pull-credentials: true
-          # 21c XE and 23ai Free are exercised against both column types.
-          - oracle-version: "21c-xe"
-            image: "container-registry.oracle.com/database/express:21.3.0-xe"
-            service-name: XEPDB1
-            resource-json-data-type: "BLOB"
-            report-suffix: ""
-            pull-credentials: false
-          - oracle-version: "21c-xe"
-            image: "container-registry.oracle.com/database/express:21.3.0-xe"
-            service-name: XEPDB1
-            resource-json-data-type: "JSON"
-            report-suffix: "-json"
-            pull-credentials: false
-          - oracle-version: "23ai-free"
-            image: "container-registry.oracle.com/database/free:latest"
-            service-name: FREEPDB1
-            resource-json-data-type: "BLOB"
-            report-suffix: ""
-            pull-credentials: false
-          - oracle-version: "23ai-free"
-            image: "container-registry.oracle.com/database/free:latest"
-            service-name: FREEPDB1
-            resource-json-data-type: "JSON"
-            report-suffix: "-json"
-            pull-credentials: false
-
-    services:
-      oracle:
-        image: ${{ matrix.image }}
-        env:
-          ORACLE_PWD: ${{ secrets.ORACLE_PASSWORD }}
-        ports:
-          - 1521:1521
-        options: >-
-          --health-cmd "healthcheck.sh"
-          --health-interval 30s
-          --health-timeout 20s
-          --health-retries 10
-          --health-start-period 30m
-
-    steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
-        with:
-          submodules: recursive
-
-      - name: Log in to GHCR
-        if: matrix.pull-credentials
-        uses: docker/login-action@v3
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
-
-      - name: Setup bun
-        uses: oven-sh/setup-bun@v2
-        with:
-          bun-version: latest
-
-      - name: Install dependencies
-        run: bun install --frozen-lockfile
-
-      - name: Build project
-        run: bun run build
-
-      - name: Run lint
-        run: bun run lint
-
-      - name: Check formatting
-        run: bun run format:check
-
-      - name: Create app user
-        if: matrix.pull-credentials
-        run: |
-          docker exec ${{ job.services.oracle.id }} bash -c \
-            "sqlplus -S sys/${ORACLE_PWD}@localhost/ORCLCDB as sysdba <<'SQL'
-            ALTER SESSION SET CONTAINER = ${SERVICE_NAME};
-            CREATE USER fhir IDENTIFIED BY fhir QUOTA UNLIMITED ON USERS;
-            GRANT CREATE SESSION, CREATE TABLE, CREATE SEQUENCE, CREATE VIEW TO fhir;
-            exit
-            SQL" || true
-        env:
-          ORACLE_PWD: ${{ secrets.ORACLE_PASSWORD }}
-          SERVICE_NAME: ${{ matrix.service-name }}
-
-      - name: Run tests
-        run: bun run test
-        env:
-          SQLONFHIR_TEST_PATH: ./sqlonfhir/tests
-          ORACLE_HOST: localhost
-          ORACLE_PORT: "1521"
-          ORACLE_SERVICE_NAME: ${{ matrix.service-name }}
-          ORACLE_USER: fhir
-          ORACLE_PASSWORD: ${{ secrets.ORACLE_PASSWORD }}
-          ORACLE_RESOURCE_JSON_DATA_TYPE: ${{ matrix.resource-json-data-type }}
-
-      - name: Upload test report artifact
-        if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: test-report-${{ matrix.oracle-version }}${{ matrix.report-suffix }}
-          path: out/test-report.json
-          retention-days: 30
+    uses: ./.github/workflows/test.yml
+    permissions:
+      contents: read
+      packages: read
 
   publish:
     name: Publish to npm
@@ -197,8 +87,9 @@ jobs:
           REPORT_DIR="main"
           mkdir -p "${REPORT_DIR}"
 
-          # Copy the latest supported version's report as the main report.
-          cp test-reports/test-report-23ai-free/test-report.json "${REPORT_DIR}/test_report.json"
+          # The most recent supported Oracle version, in its default storage
+          # configuration, provides the headline report.
+          cp test-reports/test-report-23ai-blob/test-report.json "${REPORT_DIR}/test_report.json"
 
           # Also copy individual reports for each Oracle version.
           for version_dir in test-reports/test-report-*/; do

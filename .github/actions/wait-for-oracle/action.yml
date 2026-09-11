@@ -1,0 +1,60 @@
+# Copyright © 2026, Commonwealth Scientific and Industrial Research
+# Organisation (CSIRO) ABN 41 687 119 230.
+#
+# Licensed under the Apache License, Version 2.0 (the "License"); you may not
+# use this file except in compliance with the License. You may obtain a copy
+# of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+# WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+# License for the specific language governing permissions and limitations
+# under the License.
+#
+# Author: John Grimes
+
+name: Wait for Oracle Database
+description: >-
+  Blocks until an Oracle Database container is open for connections, failing
+  fast if the container exits or the deadline passes.
+
+inputs:
+  name:
+    description: Name of the container to wait for.
+    required: false
+    default: oracle
+  timeout:
+    description: Seconds to wait before giving up.
+    required: false
+    default: "1800"
+
+runs:
+  using: composite
+  steps:
+    - name: Wait for the database to open
+      shell: bash
+      env:
+        CONTAINER_NAME: ${{ inputs.name }}
+        TIMEOUT: ${{ inputs.timeout }}
+      run: |
+        # checkDBStatus.sh is the readiness probe shipped in the Oracle
+        # container images. It returns non-zero until both the container
+        # database and its pluggable database are open.
+        deadline=$(( SECONDS + TIMEOUT ))
+        until docker exec "${CONTAINER_NAME}" /opt/oracle/checkDBStatus.sh > /dev/null 2>&1; do
+          if [ "$(docker inspect --format '{{ .State.Running }}' "${CONTAINER_NAME}")" != "true" ]; then
+            echo "The database container stopped after ${SECONDS}s without opening."
+            docker logs --tail 200 "${CONTAINER_NAME}"
+            exit 1
+          fi
+          if [ "${SECONDS}" -ge "${deadline}" ]; then
+            echo "The database did not open within ${TIMEOUT}s."
+            docker logs --tail 200 "${CONTAINER_NAME}"
+            exit 1
+          fi
+          echo "Waiting for the database to open (${SECONDS}s elapsed)..."
+          sleep 15
+        done
+        echo "The database opened after ${SECONDS}s."
