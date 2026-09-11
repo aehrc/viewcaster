@@ -19,6 +19,11 @@
 -- Executed once by the Oracle container image after the database is created
 -- (mounted at /opt/oracle/scripts/setup).
 
+-- Abort on the first error rather than pressing on with a half-created user.
+-- Without this, SQL*Plus reports the error and exits zero, so a missing grant
+-- only surfaces later as ORA-01031 at CREATE TABLE time.
+WHENEVER SQLERROR EXIT FAILURE
+
 ALTER SESSION SET CONTAINER = FREEPDB1;
 
 CREATE USER fhir IDENTIFIED BY fhir
@@ -28,7 +33,10 @@ CREATE USER fhir IDENTIFIED BY fhir
 
 GRANT CREATE SESSION TO fhir;
 GRANT CREATE TABLE TO fhir;
-GRANT CREATE SEQUENCE TO fhir; -- Required for identity columns.
+-- CREATE SEQUENCE is required for the identity column on the resource table.
+-- Keep this comment on its own line: SQL*Plus folds a trailing comment into
+-- the preceding statement and rejects it with ORA-00933.
+GRANT CREATE SEQUENCE TO fhir;
 GRANT CREATE VIEW TO fhir;
 GRANT UNLIMITED TABLESPACE TO fhir;
 
