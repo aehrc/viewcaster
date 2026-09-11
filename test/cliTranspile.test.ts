@@ -18,10 +18,9 @@
  */
 
 /**
- * Tests for the `viewcaster transpile` subcommand (contracts/cli.md):
- * stdin/stdout, --input/--output, --resource-json-data-type, non-zero exit
- * naming the offending element on invalid input, and exactly one SELECT
- * written on success.
+ * Tests for the `viewcaster transpile` subcommand: stdin/stdout, --input/--output,
+ * --resource-json-data-type, non-zero exit naming the offending element on invalid
+ * input, and exactly one SELECT written on success.
  */
 
 import { spawnSync } from "node:child_process";

@@ -18,10 +18,10 @@
  */
 
 /**
- * Integration tests for loader feedback and failure behaviour (FR-015, US2
- * scenarios 2-5): invalid type rejected before any connection, progress and
- * per-file summaries, verbosity controls, --dry-run, --truncate,
- * --continue-on-error, malformed-line handling and non-zero exit on failure.
+ * Integration tests for loader feedback and failure behaviour: invalid type
+ * rejected before any connection, progress and per-file summaries, verbosity
+ * controls, --dry-run, --truncate, --continue-on-error, malformed-line handling
+ * and non-zero exit on failure.
  *
  * Skips cleanly when no ORACLE_* environment is configured.
  */
@@ -83,7 +83,7 @@ describe.skipIf(!oracleAvailable)(
   },
 );
 
-describe.skipIf(!oracleAvailable)("verbosity controls (US2)", () => {
+describe.skipIf(!oracleAvailable)("verbosity controls", () => {
   it("reports progress and a per-file summary with verbose output", async () => {
     const tableName = harness.makeTableName();
     const logSpy = vi.spyOn(console, "log").mockImplementation(() => {});
@@ -161,7 +161,7 @@ describe.skipIf(!oracleAvailable)("verbosity controls (US2)", () => {
   });
 });
 
-describe.skipIf(!oracleAvailable)("dry run (US2 scenario 3)", () => {
+describe.skipIf(!oracleAvailable)("dry run", () => {
   it("reports counts and creates nothing in the database", async () => {
     const tableName = harness.makeTableName();
     const spies = silence();
@@ -213,7 +213,7 @@ describe.skipIf(!oracleAvailable)("dry run (US2 scenario 3)", () => {
   });
 });
 
-describe.skipIf(!oracleAvailable)("truncate (US2 scenario 2)", () => {
+describe.skipIf(!oracleAvailable)("truncate", () => {
   it("empties the table before reloading", async () => {
     const tableName = harness.makeTableName();
     const spies = silence();
@@ -229,171 +229,167 @@ describe.skipIf(!oracleAvailable)("truncate (US2 scenario 2)", () => {
   });
 });
 
-describe.skipIf(!oracleAvailable)(
-  "malformed-line handling (data-model.md)",
-  () => {
-    it("ignores blank lines", async () => {
-      const tableName = harness.makeTableName();
-      const spies = silence();
-      try {
-        const directory = harness.writeNdjsonDir({
-          "Patient.ndjson": [
-            "",
-            JSON.stringify(SAMPLE_PATIENTS[0]),
-            " ".repeat(3),
-            JSON.stringify(SAMPLE_PATIENTS[1]),
-            "",
-          ],
-        });
-        const result = await harness.loadDir(directory, tableName);
-        expect(result.failed).toBe(false);
-        expect(result.totalRows).toBe(2);
-        expect(await harness.getRowCount(tableName)).toBe(2);
-      } finally {
-        restore(spies);
-      }
-    });
-
-    it("fails the file on a malformed line without continue-on-error", async () => {
-      const tableName = harness.makeTableName();
-      const spies = silence();
-      try {
-        const directory = harness.writeNdjsonDir({
-          "Patient.ndjson": [
-            JSON.stringify(SAMPLE_PATIENTS[0]),
-            "not json at all {",
-          ],
-        });
-        await expect(harness.loadDir(directory, tableName)).rejects.toThrow(
-          /Failed to load/,
-        );
-        // The rows in the failing batch must not all have been loaded.
-        expect(await harness.getRowCount(tableName)).toBeLessThan(
-          SAMPLE_PATIENTS.length,
-        );
-      } finally {
-        restore(spies);
-      }
-    });
-
-    it("reports and skips malformed lines with continue-on-error", async () => {
-      const tableName = harness.makeTableName();
-      const spies = silence();
-      try {
-        const directory = harness.writeNdjsonDir({
-          "Patient.ndjson": [
-            JSON.stringify(SAMPLE_PATIENTS[0]),
-            "not json at all {",
-            JSON.stringify(SAMPLE_PATIENTS[1]),
-          ],
-        });
-        const result = await harness.loadDir(directory, tableName, {
-          continueOnError: true,
-        });
-        // The failure is reported and the file is marked failed...
-        expect(result.failed).toBe(true);
-        const patientFile = result.files.find(
-          (file) => file.resourceType === "Patient",
-        );
-        expect(patientFile?.errors.length).toBeGreaterThan(0);
-        // ...while the well-formed rows still load.
-        expect(patientFile?.rowsLoaded).toBe(2);
-        expect(await harness.getRowCount(tableName)).toBe(2);
-      } finally {
-        restore(spies);
-      }
-    });
-
-    it("keeps going when a whole file fails with continue-on-error", async () => {
-      const tableName = harness.makeTableName();
-      const spies = silence();
-      try {
-        const directory = harness.writeNdjsonDir({
-          "Observation.ndjson": [
-            JSON.stringify({ resourceType: "Observation", id: "o1" }),
-          ],
-          "Broken.ndjson": ["{definitely not json"],
-        });
-        const result = await harness.loadDir(directory, tableName, {
-          continueOnError: true,
-        });
-        expect(result.failed).toBe(true);
-        const observationFile = result.files.find(
-          (file) => file.resourceType === "Observation",
-        );
-        expect(observationFile?.rowsLoaded).toBe(1);
-        expect(observationFile?.errors).toHaveLength(0);
-        const brokenFile = result.files.find(
-          (file) => file.resourceType === "Broken",
-        );
-        expect(brokenFile?.rowsLoaded).toBe(0);
-        expect(brokenFile?.errors.length).toBeGreaterThan(0);
-      } finally {
-        restore(spies);
-      }
-    });
-  },
-);
-
-describe.skipIf(!oracleAvailable)(
-  "exit status through the CLI (US2 scenario 5)",
-  () => {
-    it("exits non-zero on failure even with --continue-on-error", async (ctx) => {
-      await Promise.resolve();
-      if (!hasOracleEnvironment()) {
-        ctx.skip();
-      }
-      const tableName = harness.makeTableName();
+describe.skipIf(!oracleAvailable)("malformed-line handling", () => {
+  it("ignores blank lines", async () => {
+    const tableName = harness.makeTableName();
+    const spies = silence();
+    try {
       const directory = harness.writeNdjsonDir({
-        "Patient.ndjson": [JSON.stringify(SAMPLE_PATIENTS[0]), "broken {"],
-      });
-      const result = spawnSync(
-        "bunx",
-        [
-          "tsx",
-          "src/cli.ts",
-          "load",
-          directory,
-          "--table-name",
-          tableName,
-          "--continue-on-error",
-          "--quiet",
+        "Patient.ndjson": [
+          "",
+          JSON.stringify(SAMPLE_PATIENTS[0]),
+          " ".repeat(3),
+          JSON.stringify(SAMPLE_PATIENTS[1]),
+          "",
         ],
-        { encoding: "utf8", cwd: process.cwd() },
-      );
-      expect(result.status).not.toBe(0);
-    });
+      });
+      const result = await harness.loadDir(directory, tableName);
+      expect(result.failed).toBe(false);
+      expect(result.totalRows).toBe(2);
+      expect(await harness.getRowCount(tableName)).toBe(2);
+    } finally {
+      restore(spies);
+    }
+  });
 
-    it("exits zero on a successful load", async (ctx) => {
-      if (!hasOracleEnvironment()) {
-        ctx.skip();
-      }
-      const tableName = harness.makeTableName();
+  it("fails the file on a malformed line without continue-on-error", async () => {
+    const tableName = harness.makeTableName();
+    const spies = silence();
+    try {
       const directory = harness.writeNdjsonDir({
-        "Patient.ndjson": SAMPLE_PATIENTS.map((patient) =>
-          JSON.stringify(patient),
-        ),
-      });
-      const result = spawnSync(
-        "bunx",
-        [
-          "tsx",
-          "src/cli.ts",
-          "load",
-          directory,
-          "--table-name",
-          tableName,
-          "--quiet",
+        "Patient.ndjson": [
+          JSON.stringify(SAMPLE_PATIENTS[0]),
+          "not json at all {",
         ],
-        { encoding: "utf8", cwd: process.cwd() },
+      });
+      await expect(harness.loadDir(directory, tableName)).rejects.toThrow(
+        /Failed to load/,
       );
-      expect(result.status).toBe(0);
-      expect(await harness.getRowCount(tableName)).toBe(SAMPLE_PATIENTS.length);
-    });
-  },
-);
+      // The rows in the failing batch must not all have been loaded.
+      expect(await harness.getRowCount(tableName)).toBeLessThan(
+        SAMPLE_PATIENTS.length,
+      );
+    } finally {
+      restore(spies);
+    }
+  });
 
-describe.skipIf(!oracleAvailable)("empty input (US2)", () => {
+  it("reports and skips malformed lines with continue-on-error", async () => {
+    const tableName = harness.makeTableName();
+    const spies = silence();
+    try {
+      const directory = harness.writeNdjsonDir({
+        "Patient.ndjson": [
+          JSON.stringify(SAMPLE_PATIENTS[0]),
+          "not json at all {",
+          JSON.stringify(SAMPLE_PATIENTS[1]),
+        ],
+      });
+      const result = await harness.loadDir(directory, tableName, {
+        continueOnError: true,
+      });
+      // The failure is reported and the file is marked failed...
+      expect(result.failed).toBe(true);
+      const patientFile = result.files.find(
+        (file) => file.resourceType === "Patient",
+      );
+      expect(patientFile?.errors.length).toBeGreaterThan(0);
+      // ...while the well-formed rows still load.
+      expect(patientFile?.rowsLoaded).toBe(2);
+      expect(await harness.getRowCount(tableName)).toBe(2);
+    } finally {
+      restore(spies);
+    }
+  });
+
+  it("keeps going when a whole file fails with continue-on-error", async () => {
+    const tableName = harness.makeTableName();
+    const spies = silence();
+    try {
+      const directory = harness.writeNdjsonDir({
+        "Observation.ndjson": [
+          JSON.stringify({ resourceType: "Observation", id: "o1" }),
+        ],
+        "Broken.ndjson": ["{definitely not json"],
+      });
+      const result = await harness.loadDir(directory, tableName, {
+        continueOnError: true,
+      });
+      expect(result.failed).toBe(true);
+      const observationFile = result.files.find(
+        (file) => file.resourceType === "Observation",
+      );
+      expect(observationFile?.rowsLoaded).toBe(1);
+      expect(observationFile?.errors).toHaveLength(0);
+      const brokenFile = result.files.find(
+        (file) => file.resourceType === "Broken",
+      );
+      expect(brokenFile?.rowsLoaded).toBe(0);
+      expect(brokenFile?.errors.length).toBeGreaterThan(0);
+    } finally {
+      restore(spies);
+    }
+  });
+});
+
+describe.skipIf(!oracleAvailable)("exit status through the CLI", () => {
+  it("exits non-zero on failure even with --continue-on-error", async (ctx) => {
+    await Promise.resolve();
+    if (!hasOracleEnvironment()) {
+      // eslint-disable-next-line vitest/no-disabled-tests -- runtime gate, not a disabled test
+      ctx.skip();
+    }
+    const tableName = harness.makeTableName();
+    const directory = harness.writeNdjsonDir({
+      "Patient.ndjson": [JSON.stringify(SAMPLE_PATIENTS[0]), "broken {"],
+    });
+    const result = spawnSync(
+      "bunx",
+      [
+        "tsx",
+        "src/cli.ts",
+        "load",
+        directory,
+        "--table-name",
+        tableName,
+        "--continue-on-error",
+        "--quiet",
+      ],
+      { encoding: "utf8", cwd: process.cwd() },
+    );
+    expect(result.status).not.toBe(0);
+  });
+
+  it("exits zero on a successful load", async (ctx) => {
+    if (!hasOracleEnvironment()) {
+      // eslint-disable-next-line vitest/no-disabled-tests -- runtime gate, not a disabled test
+      ctx.skip();
+    }
+    const tableName = harness.makeTableName();
+    const directory = harness.writeNdjsonDir({
+      "Patient.ndjson": SAMPLE_PATIENTS.map((patient) =>
+        JSON.stringify(patient),
+      ),
+    });
+    const result = spawnSync(
+      "bunx",
+      [
+        "tsx",
+        "src/cli.ts",
+        "load",
+        directory,
+        "--table-name",
+        tableName,
+        "--quiet",
+      ],
+      { encoding: "utf8", cwd: process.cwd() },
+    );
+    expect(result.status).toBe(0);
+    expect(await harness.getRowCount(tableName)).toBe(SAMPLE_PATIENTS.length);
+  });
+});
+
+describe.skipIf(!oracleAvailable)("empty input", () => {
   it("loads zero rows and creates nothing when no files match", async () => {
     const tableName = harness.makeTableName();
     const spies = silence();

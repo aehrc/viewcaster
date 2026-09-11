@@ -23,7 +23,7 @@
 
 /**
  * Canonical JSON storage types allowed for the resources table `json` column
- * (data-model.md): `BLOB` with an IS JSON check constraint on 19c+, and the
+ * `BLOB` with an IS JSON check constraint on 19c+, and the
  * native `JSON` type on 21c+.
  */
 export type ResourceJsonDataType = "BLOB" | "JSON";
@@ -297,7 +297,7 @@ const ORACLE_RESERVED_WORDS = new Set([
  * - Must not be a reserved word
  * @param identifier - The identifier to validate
  * @param type - The type of identifier (for error messages)
- * @throws Error if the identifier is invalid
+ * @throws {Error} if the identifier is invalid
  */
 export function validateOracleIdentifier(
   identifier: string,
@@ -334,7 +334,7 @@ export function validateOracleIdentifier(
 /**
  * Validate a FHIR resource type against the R4 specification.
  * @param resourceType - The resource type to validate
- * @throws Error if the resource type is not valid
+ * @throws {Error} if the resource type is not valid
  */
 export function validateResourceType(resourceType: string): void {
   if (!resourceType || resourceType.trim().length === 0) {
@@ -388,7 +388,7 @@ const VALID_ORACLE_TYPES = new Set([
 /**
  * Validate an Oracle SQL type specification.
  * @param sqlType - Oracle type string (e.g. 'VARCHAR2(4000)', 'NUMBER(10,2)', 'CLOB').
- * @throws Error if the type is invalid
+ * @throws {Error} if the type is invalid
  */
 export function validateOracleType(sqlType: string): void {
   if (!sqlType || sqlType.trim().length === 0) {
@@ -469,7 +469,7 @@ const ANSI_TO_ORACLE_TYPE_MAP = new Map<string, string>([
 
   // Boolean (SQL:1999)
   // Oracle before 23ai has no SQL BOOLEAN; NUMBER(1) is the established
-  // convention and keeps one SQL text across 19c-23ai (research R6).
+  // convention and keeps one SQL text across 19c-23ai.
   ["BOOLEAN", "NUMBER(1)"],
 
   // Binary types
@@ -509,7 +509,7 @@ function parseAnsiSqlType(typeString: string): {
  * - 'TIMESTAMP' -> 'TIMESTAMP'
  * @param ansiType - ANSI/ISO SQL type string (e.g. 'INTEGER', 'CHARACTER(20)').
  * @returns Oracle equivalent type.
- * @throws Error if type is invalid or unsupported.
+ * @throws {Error} if type is invalid or unsupported.
  */
 export function validateAnsiSqlType(ansiType: string): string {
   if (!ansiType || ansiType.trim().length === 0) {

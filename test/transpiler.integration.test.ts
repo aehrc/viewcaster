@@ -24,7 +24,7 @@
  * test table, transpile the ViewDefinition with `SqlOnFhir`, execute the
  * generated SQL on Oracle, and compare the rows with the expected output
  * using the ported comparison semantics plus the documented '' ≡ NULL
- * equivalence (research R8). Results are stored in `globalThis.testResults`
+ * equivalence. Results are stored in `globalThis.testResults`
  * and written by the Vitest reporter to out/test-report.json.
  *
  * The test path comes from SQLONFHIR_TEST_PATH (default ./sqlonfhir/tests).
@@ -251,7 +251,7 @@ function looksLikeJson(value: string): boolean {
 
 /**
  * Deep equality with FHIR type handling and the documented '' ≡ NULL
- * equivalence (research R8): Oracle cannot distinguish the empty string from
+ * equivalence: Oracle cannot distinguish the empty string from
  * SQL NULL, so the comparison treats them as equivalent.
  * @param a - Actual value.
  * @param b - Expected value.
@@ -271,7 +271,7 @@ function deepEqual(a: unknown, b: unknown): boolean {
 
 /**
  * Checks whether both values are null/undefined/empty-string equivalent
- * (research R8).
+ * (empty string or null).
  * @param a - First value.
  * @param b - Second value.
  * @returns True when indistinguishable on Oracle.

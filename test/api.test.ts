@@ -18,9 +18,9 @@
  */
 
 /**
- * Public API tests (US3, contracts/api.md): exercise only the package root -
- * the export surface, transpile input forms, TranspileResult shape, custom
- * SqlOnFhirOptions reflected in generated SQL, and the error contract.
+ * Public API tests: exercise only the package root - the export surface,
+ * transpile input forms, TranspileResult shape, custom SqlOnFhirOptions
+ * reflected in generated SQL, and the error contract.
  */
 
 import { mkdtempSync } from "node:fs";

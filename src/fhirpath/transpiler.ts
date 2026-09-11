@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -49,7 +49,7 @@ export class Transpiler {
    * @param context - The transpiler context (aliases, constants, storage).
    * @returns The Oracle SQL expression.
    * @throws {Error} On syntax errors, unknown constants, or unsupported
-   *   constructs; the message names the offending element (FR-004).
+   *   constructs; the message names the offending element.
    */
   static transpile(expression: string, context: TranspilerContext): string {
     // Check for syntax errors first, before any try-catch
@@ -106,8 +106,7 @@ export class Transpiler {
    * fragments.
    *
    * JSON_VALUE/JSON_QUERY calls whose source is a simple column reference get
-   * `FORMAT JSON` after the source in BLOB storage mode (mandatory there per
-   * research R3) and a `RETURNING VARCHAR2(4000)` clause on JSON_VALUE (the
+   * `FORMAT JSON` after the source in BLOB storage mode (mandatory there) and a `RETURNING VARCHAR2(4000)` clause on JSON_VALUE (the
    * documented default, emitted explicitly). Calls with a nested function
    * call as the source (e.g. JSON_VALUE(JSON_QUERY(...))) are left alone: the
    * inner function already yields JSON-typed text and the default return type
@@ -138,7 +137,7 @@ export class Transpiler {
   /**
    * Get the SQL data type for a FHIR type, with optional tag-based override.
    *
-   * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
+   * Type precedence: oracle/type > ansi/type > FHIR type defaults.
    * @param fhirType - FHIR primitive type name (e.g. 'string', 'integer').
    * @param tags - Optional array of column tags for type hints.
    * @returns Oracle SQL type specification.
@@ -159,7 +158,9 @@ export class Transpiler {
 
   /**
    * Get type override from oracle/type or ansi/type tag if present.
-   * @param tags
+   * @param tags - The column's FHIR tags, if any.
+   * @returns The Oracle type named by an `oracle/type` tag, the Oracle
+   *   equivalent of an `ansi/type` tag, or null when neither is present.
    */
   private static getTagTypeOverride(
     tags?: ViewDefinitionColumnTag[],
@@ -185,11 +186,13 @@ export class Transpiler {
   }
 
   /**
-   * Get the default Oracle type mapping for a FHIR primitive type
-   * (research R9). Text is the default so FHIR semantics (partial dates,
-   * arbitrary-precision decimals, Unicode) are preserved; native types are an
-   * explicit opt-in via type tags.
-   * @param fhirType
+   * Get the default Oracle type mapping for a FHIR primitive type. Text is
+   * the default so FHIR semantics (partial dates, arbitrary-precision
+   * decimals, Unicode) are preserved; native types are an explicit opt-in via
+   * type tags.
+   * @param fhirType - The FHIR primitive type name.
+   * @returns The Oracle type for the FHIR type, defaulting to
+   *   `VARCHAR2(4000)`.
    */
   private static getDefaultFhirTypeMapping(fhirType?: string): string {
     const typeMap: Record<string, string> = {

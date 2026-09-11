@@ -97,7 +97,7 @@ export interface TranspilerContext {
   // produces that iteration's position; absent at the resource root.
   rowIndexExpr?: string;
   // The FHIR datatype resolved from an explicit `ofType(X)` applied directly
-  // to a `lowBoundary()`/`highBoundary()` input. It governs which boundary
+  // to a `lowBoundary`/`highBoundary` input. It governs which boundary
   // algorithm is emitted. Set only on the short-lived iteration context
   // created for a boundary dispatch; absent means the datatype is inferred
   // from the value's lexical form at SQL runtime.
@@ -110,8 +110,8 @@ export class FHIRPathToOracleVisitor
   implements fhirpathVisitor<string>
 {
   /**
-   *
-   * @param context
+   * Initializes the FHIRPath to Oracle visitor with transpilation context.
+   * @param context - The transpiler context containing resource alias, JSON column, and storage type.
    */
   constructor(private readonly context: TranspilerContext) {
     super();
@@ -119,6 +119,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * The name of the JSON column on the resources table.
+   * @returns The column name.
    */
   private get jsonColumn(): string {
     return this.context.resourceJsonColumn ?? "json";
@@ -126,6 +127,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * The targeted JSON storage type (BLOB emits `FORMAT JSON`).
+   * @returns The storage type \("BLOB" or "JSON"\).
    */
   private get storage(): "BLOB" | "JSON" {
     return this.context.resourceJsonDataType ?? "BLOB";
@@ -133,6 +135,7 @@ export class FHIRPathToOracleVisitor
 
   /**
    * The root JSON source expression (`r.json`).
+   * @returns The root JSON source expression.
    */
   private get rootJson(): string {
     return `${this.context.resourceAlias}.${this.jsonColumn}`;
@@ -143,24 +146,27 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an entire FHIRPath expression and emits the equivalent Oracle SQL.
+   * @param ctx - The entire expression parse tree node.
+   * @returns The Oracle SQL fragment for the expression.
    */
   visitEntireExpression(ctx: EntireExpressionContext): string {
     return this.visit(ctx.expression());
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a term expression and emits the equivalent Oracle SQL.
+   * @param ctx - The term expression parse tree node.
+   * @returns The Oracle SQL fragment for the term.
    */
   visitTermExpression(ctx: TermExpressionContext): string {
     return this.visit(ctx.term());
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an invocation expression and emits the equivalent Oracle SQL.
+   * @param ctx - The invocation expression parse tree node.
+   * @returns The Oracle SQL fragment for the expression with invocation applied.
    */
   visitInvocationExpression(ctx: InvocationExpressionContext): string {
     const base = this.visit(ctx.expression());
@@ -170,7 +176,7 @@ export class FHIRPathToOracleVisitor
       return this.handleMemberInvocation(base, invocation);
     } else if (invocation instanceof FunctionInvocationContext) {
       // Pass the base expression's parse tree so boundary functions can detect
-      // an explicit ofType() applied directly to their input.
+      // an explicit ofType applied directly to their input.
       return this.handleFunctionInvocation(base, invocation, ctx.expression());
     }
 
@@ -178,14 +184,15 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an indexer expression and emits Oracle SQL for array indexing.
+   * @param ctx - The indexer expression parse tree node.
+   * @returns The Oracle SQL fragment for the indexed expression.
    */
   visitIndexerExpression(ctx: IndexerExpressionContext): string {
     const base = this.visit(ctx.expression(0));
     const index = this.visit(ctx.expression(1));
 
-    // Filtered-collection subqueries from where()/extension() select only
+    // Filtered-collection subqueries from where/extension select only
     // the first matching element (ROWNUM = 1), so [0] is the subquery itself
     // and any other index cannot be represented.
     if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
@@ -197,7 +204,7 @@ export class FHIRPathToOracleVisitor
       return base;
     }
 
-    // A where() subquery that already selects a field: splice the index into
+    // A where subquery that already selects a field: splice the index into
     // the field path (name.where(...).given[0] -> '$.given[0]'), keeping the
     // subquery's FROM and WHERE sections intact.
     const fieldSubquery =
@@ -230,8 +237,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a polarity expression and emits the equivalent Oracle SQL unary operator.
+   * @param ctx - The polarity expression parse tree node.
+   * @returns The Oracle SQL fragment with unary + or - applied.
    */
   visitPolarityExpression(ctx: PolarityExpressionContext): string {
     const operand = this.visit(ctx.expression());
@@ -241,8 +249,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a multiplicative expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The multiplicative expression parse tree node.
+   * @returns The Oracle SQL fragment for the multiplication, division, or modulo operation.
    */
   visitMultiplicativeExpression(ctx: MultiplicativeExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -275,8 +284,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an additive expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The additive expression parse tree node.
+   * @returns The Oracle SQL fragment for the addition, subtraction, or string concatenation operation.
    */
   visitAdditiveExpression(ctx: AdditiveExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -310,8 +320,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a type expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The type expression parse tree node.
+   * @returns The Oracle SQL fragment for the type assertion.
    */
   visitTypeExpression(ctx: TypeExpressionContext): string {
     const expression = this.visit(ctx.expression());
@@ -334,8 +345,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a union expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The union expression parse tree node.
+   * @returns The Oracle SQL fragment for the union operation.
    */
   visitUnionExpression(ctx: UnionExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -348,8 +360,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an inequality expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The inequality expression parse tree node.
+   * @returns The Oracle SQL fragment for the comparison operation.
    */
   visitInequalityExpression(ctx: InequalityExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -379,8 +392,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an equality expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The equality expression parse tree node.
+   * @returns The Oracle SQL fragment for the equality or inequality test.
    */
   visitEqualityExpression(ctx: EqualityExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -410,8 +424,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a membership expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The membership expression parse tree node.
+   * @returns The Oracle SQL fragment for the membership test.
    */
   visitMembershipExpression(ctx: MembershipExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -442,8 +457,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a logical AND expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The AND expression parse tree node.
+   * @returns The Oracle SQL fragment for the logical AND operation.
    */
   visitAndExpression(ctx: AndExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -452,8 +468,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a logical OR expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The OR expression parse tree node.
+   * @returns The Oracle SQL fragment for the logical OR operation.
    */
   visitOrExpression(ctx: OrExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -471,8 +488,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an implies expression and emits the equivalent Oracle SQL operator.
+   * @param ctx - The implies expression parse tree node.
+   * @returns The Oracle SQL fragment for the implication operation.
    */
   visitImpliesExpression(ctx: ImpliesExpressionContext): string {
     const left = this.visit(ctx.expression(0));
@@ -483,16 +501,18 @@ export class FHIRPathToOracleVisitor
 
   // Literal visitors
   /**
-   *
-   * @param _ctx
+   * Visits a null literal and emits the SQL NULL value.
+   * @param _ctx - The null literal parse tree node (unused).
+   * @returns The SQL NULL keyword.
    */
   visitNullLiteral(_ctx: NullLiteralContext): string {
     return "NULL";
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a boolean literal and emits it as a quoted SQL string.
+   * @param ctx - The boolean literal parse tree node.
+   * @returns The SQL string 'true' or 'false'.
    */
   visitBooleanLiteral(ctx: BooleanLiteralContext): string {
     const value = ctx.text.toLowerCase();
@@ -501,8 +521,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a string literal and emits it as a SQL string with proper quote escaping.
+   * @param ctx - The string literal parse tree node.
+   * @returns The SQL string with internal quotes escaped.
    */
   visitStringLiteral(ctx: StringLiteralContext): string {
     // Remove surrounding quotes and escape internal quotes
@@ -511,24 +532,27 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a number literal and emits it as a SQL number.
+   * @param ctx - The number literal parse tree node.
+   * @returns The SQL numeric literal.
    */
   visitNumberLiteral(ctx: NumberLiteralContext): string {
     return ctx.text;
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a long number literal and emits it as a SQL number.
+   * @param ctx - The long number literal parse tree node.
+   * @returns The SQL numeric literal without the trailing L suffix.
    */
   visitLongNumberLiteral(ctx: LongNumberLiteralContext): string {
     return ctx.text.replace(/L$/i, "");
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a date literal and emits it as a quoted SQL string.
+   * @param ctx - The date literal parse tree node.
+   * @returns The SQL date string without the @ prefix.
    */
   visitDateLiteral(ctx: DateLiteralContext): string {
     // Remove @ prefix and wrap in quotes for SQL
@@ -537,8 +561,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a datetime literal and emits it as a quoted SQL string.
+   * @param ctx - The datetime literal parse tree node.
+   * @returns The SQL datetime string without the @ prefix.
    */
   visitDateTimeLiteral(ctx: DateTimeLiteralContext): string {
     // Remove @ prefix and wrap in quotes for SQL
@@ -547,8 +572,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a time literal and emits it as a quoted SQL string.
+   * @param ctx - The time literal parse tree node.
+   * @returns The SQL time string without the `@T` prefix.
    */
   visitTimeLiteral(ctx: TimeLiteralContext): string {
     // Remove @T prefix and wrap in quotes for SQL
@@ -557,8 +583,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a quantity literal and emits the equivalent Oracle SQL.
+   * @param ctx - The quantity literal parse tree node.
+   * @returns The Oracle SQL fragment for the quantity value.
    */
   visitQuantityLiteral(ctx: QuantityLiteralContext): string {
     return this.visit(ctx.quantity());
@@ -566,8 +593,9 @@ export class FHIRPathToOracleVisitor
 
   // Invocation visitors
   /**
-   *
-   * @param ctx
+   * Visits a member invocation and emits the equivalent Oracle SQL.
+   * @param ctx - The member invocation parse tree node.
+   * @returns The Oracle SQL fragment for accessing the member field or invoking the member function.
    */
   visitMemberInvocation(ctx: MemberInvocationContext): string {
     const memberName = this.visit(ctx.identifier());
@@ -613,16 +641,18 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a function invocation and emits the equivalent Oracle SQL.
+   * @param ctx - The function invocation parse tree node.
+   * @returns The Oracle SQL fragment for the function invocation.
    */
   visitFunctionInvocation(ctx: FunctionInvocationContext): string {
     return this.visit(ctx.function());
   }
 
   /**
-   *
-   * @param _ctx
+   * Visits a this invocation and emits the root resource JSON reference.
+   * @param _ctx - The this invocation parse tree node (unused).
+   * @returns The Oracle SQL root JSON source expression.
    */
   visitThisInvocation(_ctx: ThisInvocationContext): string {
     // $this refers to the current item in an iteration context. A JSON_TABLE
@@ -660,8 +690,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param _ctx
+   * Visits an index invocation and emits the current array index reference.
+   * @param _ctx - The index invocation parse tree node (unused).
+   * @returns The Oracle SQL representation of the current array index.
    */
   visitIndexInvocation(_ctx: IndexInvocationContext): string {
     // $index in forEach contexts - return current iteration index (0-based)
@@ -675,8 +706,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param _ctx
+   * Visits a total invocation and emits the count of elements.
+   * @param _ctx - The total invocation parse tree node (unused).
+   * @returns The Oracle SQL fragment to count array elements.
    */
   visitTotalInvocation(_ctx: TotalInvocationContext): string {
     // $total in forEach contexts - return total count of items in current iteration
@@ -698,32 +730,36 @@ export class FHIRPathToOracleVisitor
 
   // Term visitors
   /**
-   *
-   * @param ctx
+   * Visits an invocation term and emits the equivalent Oracle SQL.
+   * @param ctx - The invocation term parse tree node.
+   * @returns The Oracle SQL fragment for the term.
    */
   visitInvocationTerm(ctx: InvocationTermContext): string {
     return this.visit(ctx.invocation());
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a literal term and emits the equivalent Oracle SQL literal.
+   * @param ctx - The literal term parse tree node.
+   * @returns The Oracle SQL fragment for the literal.
    */
   visitLiteralTerm(ctx: LiteralTermContext): string {
     return this.visit(ctx.literal());
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an external constant term and emits a reference to the external constant.
+   * @param ctx - The external constant term parse tree node.
+   * @returns The Oracle SQL fragment for the external constant value.
    */
   visitExternalConstantTerm(ctx: ExternalConstantTermContext): string {
     return this.visit(ctx.externalConstant());
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a parenthesized term and emits the parenthesized expression.
+   * @param ctx - The parenthesized term parse tree node.
+   * @returns The Oracle SQL fragment with parentheses.
    */
   visitParenthesizedTerm(ctx: ParenthesizedTermContext): string {
     const expr = this.visit(ctx.expression());
@@ -731,8 +767,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an external constant definition and emits its SQL representation.
+   * @param ctx - The external constant parse tree node.
+   * @returns The Oracle SQL fragment for the external constant value.
    */
   visitExternalConstant(ctx: ExternalConstantContext): string {
     let constantName: string;
@@ -770,14 +807,15 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a function definition and emits the appropriate Oracle SQL function call.
+   * @param ctx - The function parse tree node.
+   * @returns The Oracle SQL fragment for the function invocation.
    */
   visitFunction(ctx: FunctionContext): string {
     const functionName = this.visit(ctx.identifier());
     const paramList = ctx.paramList();
 
-    // Special handling for where() function - need raw expression, not transpiled
+    // Special handling for where function - need raw expression, not transpiled
     if (functionName === "where") {
       if (!paramList || paramList.expression().length !== 1) {
         throw new Error("where() function requires exactly one argument");
@@ -789,7 +827,7 @@ export class FHIRPathToOracleVisitor
       // Transpile the filter expression with current context
       const filterVisitor = new FHIRPathToOracleVisitor(this.context);
 
-      // Return the condition directly - this is for root-level where() calls
+      // Return the condition directly - this is for root-level where calls
       return filterVisitor.visit(filterExprCtx);
     }
 
@@ -798,8 +836,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a quantity definition and emits the Oracle SQL representation.
+   * @param ctx - The quantity parse tree node.
+   * @returns The Oracle SQL fragment for the quantity value.
    */
   visitQuantity(ctx: QuantityContext): string {
     // For now, just return the number - unit handling would be more complex
@@ -807,8 +846,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits an identifier and emits its text representation.
+   * @param ctx - The identifier parse tree node.
+   * @returns The text of the identifier.
    */
   visitIdentifier(ctx: IdentifierContext): string {
     const identifier = ctx.IDENTIFIER();
@@ -826,8 +866,9 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   *
-   * @param ctx
+   * Visits a qualified identifier and emits its text representation.
+   * @param ctx - The qualified identifier parse tree node.
+   * @returns The text of the qualified identifier.
    */
   visitQualifiedIdentifier(ctx: QualifiedIdentifierContext): string {
     const parts = ctx.identifier().map((id) => this.visit(id));
@@ -841,10 +882,10 @@ export class FHIRPathToOracleVisitor
   ): string {
     const memberName = this.visit(memberCtx.identifier());
 
-    // Handle subquery results from .where() or .extension() functions.
+    // Handle subquery results from .where or .extension functions.
     // Forms produced by this visitor:
-    //   (SELECT value FROM JSON_TABLE(...) WHERE ...)
-    //   (SELECT JSON_VALUE(value, '$.field') FROM JSON_TABLE(...) WHERE ...)
+    // (SELECT value FROM JSON_TABLE(...) WHERE ...)
+    // (SELECT JSON_VALUE(value, '$.field') FROM JSON_TABLE(...) WHERE ...)
     if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
       const fromPart = base.slice(Math.max(0, base.indexOf(" FROM ")));
       return `(SELECT JSON_VALUE(value, '$.${memberName}')${fromPart}`;
@@ -992,7 +1033,8 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Checks if a member name represents a FHIR array field.
-   * @param memberName
+   * @param memberName - The FHIR element name being navigated to.
+   * @returns True when the element is a known repeating element.
    */
   private isArrayField(memberName: string): boolean {
     const knownArrayFields = [
@@ -1015,9 +1057,11 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Handles nested JSON_QUERY with array indexing.
-   * @param source
-   * @param existingPath
-   * @param memberName
+   * @param source - The SQL expression the member is being read from.
+   * @param existingPath - The JSON path already applied to the source.
+   * @param memberName - The FHIR element name being appended to the path.
+   * @returns A collapsed `JSON_VALUE` expression, or null when the source is
+   * not an indexed `JSON_QUERY`.
    */
   private handleNestedQueryWithIndex(
     source: string,
@@ -1124,27 +1168,27 @@ export class FHIRPathToOracleVisitor
     const functionName = this.visit(functionCtx.function().identifier());
     const paramList = functionCtx.function().paramList();
 
-    // Special handling for first() function to match expected format
+    // Special handling for first function to match expected format
     if (functionName === "first") {
       return this.handleFirstFunctionInvocation(base);
     }
 
-    // Special handling for where() function - need raw expression, not transpiled
+    // Special handling for where function - need raw expression, not transpiled
     if (functionName === "where") {
       return this.handleWhereFunctionInvocation(base, functionCtx);
     }
 
-    // Special handling for ofType() function - need raw type name, not transpiled
+    // Special handling for ofType function - need raw type name, not transpiled
     if (functionName === "ofType") {
       return this.handleOfTypeFunctionInvocation(base, functionCtx);
     }
 
-    // Special handling for getReferenceKey() function - need raw type name, not transpiled
+    // Special handling for getReferenceKey function - need raw type name, not transpiled
     if (functionName === "getReferenceKey") {
       return this.handleGetReferenceKeyFunctionInvocation(base, functionCtx);
     }
 
-    // Special handling for exists() function - need raw expression, not transpiled
+    // Special handling for exists function - need raw expression, not transpiled
     if (functionName === "exists") {
       return this.handleExistsFunctionInvocation(base, functionCtx);
     }
@@ -1154,7 +1198,7 @@ export class FHIRPathToOracleVisitor
     // Create new context and delegate to function handler
     const newContext = this.createNewIterationContext(base);
 
-    // Carry a directly-applied ofType() datatype to the boundary handler so it
+    // Carry a directly-applied ofType datatype to the boundary handler so it
     // picks the right algorithm.
     if (functionName === "lowBoundary" || functionName === "highBoundary") {
       newContext.boundaryType =
@@ -1169,8 +1213,8 @@ export class FHIRPathToOracleVisitor
    * Resolves the FHIR datatype named by an `ofType(X)` invocation when that
    * invocation is applied directly to the given expression (i.e. the expression
    * is `<something>.ofType(X)`). Returns `null` when the expression is not a
-   * direct `ofType()` call, including when a member access intervenes between
-   * the `ofType()` and the caller.
+   * direct `ofType` call, including when a member access intervenes between
+   * the `ofType` and the caller.
    * @param baseExpr - The base expression a function is being applied to.
    * @returns The raw ofType datatype name (e.g. "dateTime"), or null.
    */
@@ -1234,11 +1278,13 @@ export class FHIRPathToOracleVisitor
    * Maps polymorphic FHIR fields to their typed variants.
    * Example: value.ofType(integer) → valueInteger
    * Handles paths with array indices like "output[0].value" → "output[0].valueInteger"
-   * @param base
-   * @param typeName
+   * @param base - The SQL expression navigating to the polymorphic element.
+   * @param typeName - The FHIR type named by `ofType`.
+   * @returns The expression with the typed element name substituted, or the
+   * unchanged expression when the element is not polymorphic.
    */
   private applyPolymorphicFieldMapping(base: string, typeName: string): string {
-    // Handle SELECT subqueries from extension() function
+    // Handle SELECT subqueries from extension function
     // Pattern: (SELECT JSON_VALUE(value, '$.value') FROM ...)
     if (base.startsWith("(SELECT JSON_VALUE(value, '$.")) {
       const suffix = this.getTypeSuffix(typeName);
@@ -1288,7 +1334,9 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Returns the type suffix for polymorphic field mapping.
-   * @param typeName
+   * @param typeName - The FHIR type name, for example "integer".
+   * @returns The capitalised suffix appended to the element name, for example
+   * "Integer"; unknown types are returned unchanged.
    */
   private getTypeSuffix(typeName: string): string {
     const typeMap: Record<string, string> = {
@@ -1326,7 +1374,8 @@ export class FHIRPathToOracleVisitor
   /**
    * Checks if a path represents a polymorphic field (value[x], onset[x], effective[x], deceased[x], identified[x]).
    * Handles paths with array indices like "output[0].value" or "item[1].onset".
-   * @param path
+   * @param path - The JSON path whose final segment is tested.
+   * @returns True when the final segment names a polymorphic element.
    */
   private isPolymorphicField(path: string): boolean {
     // Extract the last segment after the last dot (or the whole path if no dot)
@@ -1347,7 +1396,9 @@ export class FHIRPathToOracleVisitor
   /**
    * Cast expression to DECIMAL for numeric operations if needed.
    * JSON_VALUE returns text by default, which can't be used in arithmetic operations.
-   * @param expression
+   * @param expression - The SQL expression used as an arithmetic operand.
+   * @returns The expression wrapped in `CAST(... AS DECIMAL(18,6))` when it
+   * reads JSON text and is not already cast, otherwise unchanged.
    */
   private castForNumericOperation(expression: string): string {
     // Check if expression contains JSON_VALUE and isn't already wrapped in CAST
@@ -1369,7 +1420,7 @@ export class FHIRPathToOracleVisitor
 
     const filterExprCtx = paramList.expression()[0];
 
-    // Special case: where() called at resource root level (no collection)
+    // Special case: where called at resource root level (no collection)
     if (this.isResourceRootLevel(base)) {
       const filterVisitor = new FHIRPathToOracleVisitor(this.context);
       return filterVisitor.visit(filterExprCtx);
@@ -1384,7 +1435,9 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Checks if the base expression represents the resource root level (not a collection).
-   * @param base
+   * @param base - The SQL expression the function is being applied to.
+   * @returns True when the expression is the resource itself rather than a
+   * JSON navigation or subquery.
    */
   private isResourceRootLevel(base: string): boolean {
     return (
@@ -1400,7 +1453,10 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Extracts the source and JSON path from a base expression.
-   * @param base
+   * @param base - A `JSON_QUERY` or `JSON_VALUE` expression, or any other
+   * expression.
+   * @returns The source expression and JSON path parsed out of `base`, falling
+   * back to the resource JSON column and `$`.
    */
   private extractSourceAndPath(base: string): {
     source: string;
@@ -1427,9 +1483,10 @@ export class FHIRPathToOracleVisitor
   /**
    * Builds a subquery for filtering a collection with a where condition.
    * Returns a subquery that selects the filtered items, allowing further navigation.
-   * @param source
-   * @param jsonPath
-   * @param filterExprCtx
+   * @param source - The SQL expression holding the JSON to unroll.
+   * @param jsonPath - The JSON path of the collection being filtered.
+   * @param filterExprCtx - The parse tree of the `where` filter expression.
+   * @returns A scalar subquery over `JSON_TABLE` yielding the matching items.
    */
   private buildWhereSubquery(
     source: string,
@@ -1454,7 +1511,7 @@ export class FHIRPathToOracleVisitor
 
     // Return a subquery that selects the filtered collection. ROWNUM limits
     // the result to the first match without FETCH FIRST, which mis-correlates
-    // in APPLY contexts on 19c (research R4).
+    // in APPLY contexts on 19c.
     return `(SELECT value FROM JSON_TABLE(${source}${fmt}, '${unrolledPath}' COLUMNS (${jsonTableColumns()})) ${tableAlias} WHERE ${condition} AND ROWNUM = 1)`;
   }
 
@@ -1523,7 +1580,7 @@ export class FHIRPathToOracleVisitor
         return `JSON_VALUE(${source}, '${path}[0]')`;
       }
 
-      // For non-array fields, first() should return the value as-is since it's already a scalar
+      // For non-array fields, first should return the value as-is since it's already a scalar
       return base;
     } else if (!base.includes("JSON_VALUE") && !base.includes("JSON_QUERY")) {
       // Simple identifier like 'name'
@@ -1670,8 +1727,10 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   * Handles exists() function without arguments, using iteration context or base.
-   * @param base
+   * Handles exists function without arguments, using iteration context or base.
+   * @param base - The SQL expression `exists` was applied to, if any.
+   * @returns A boolean SQL expression testing presence of the element, the
+   * current iteration item, or the resource.
    */
   private handleExistsWithoutArgs(base?: string): string {
     if (base) {
@@ -1701,7 +1760,7 @@ export class FHIRPathToOracleVisitor
   private handleExistsWithBase(base: string): string {
     const trimmedBase = base.trim();
 
-    // Subquery from .where()/.extension() - wrap in EXISTS
+    // Subquery from .where/.extension - wrap in EXISTS
     if (trimmedBase.startsWith("(SELECT")) {
       return `EXISTS ${base}`;
     }
@@ -1719,10 +1778,12 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   * Handles exists() with a filter expression: an EXISTS subquery over the
+   * Handles exists with a filter expression: an EXISTS subquery over the
    * unrolled collection with the filter applied.
-   * @param base
-   * @param filterExprCtx
+   * @param base - The SQL expression holding the collection, defaulting to the
+   * resource JSON.
+   * @param filterExprCtx - The parse tree of the filter expression.
+   * @returns An `EXISTS` predicate over the filtered collection.
    */
   private handleExistsWithFilter(
     base: string | undefined,
@@ -1747,8 +1808,10 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   * Handles exists() with a transpiled argument.
-   * @param arg
+   * Handles exists with a transpiled argument.
+   * @param arg - The already transpiled argument expression.
+   * @returns A boolean SQL expression: the argument itself when it is already
+   * a predicate, otherwise a `JSON_EXISTS` check.
    */
   private handleExistsWithArgs(arg: string): string {
     const trimmedArg = arg.trim();
@@ -1758,7 +1821,7 @@ export class FHIRPathToOracleVisitor
       return arg;
     }
 
-    // If the argument is a SELECT subquery (from .where() function), wrap in EXISTS
+    // If the argument is a SELECT subquery (from .where function), wrap in EXISTS
     if (trimmedArg.startsWith("(SELECT")) {
       return `EXISTS ${arg}`;
     }
@@ -1774,7 +1837,8 @@ export class FHIRPathToOracleVisitor
 
   /**
    * Checks if an expression is a boolean expression (contains comparison operators).
-   * @param expr
+   * @param expr - The SQL expression to classify.
+   * @returns True when the expression is already a predicate.
    */
   private isBooleanExpression(expr: string): boolean {
     return (
@@ -1882,7 +1946,7 @@ export class FHIRPathToOracleVisitor
       const childField = nestedArrayMatch[3]; // e.g., 'given'
 
       // LISTAGG yields SQL NULL when the grouped set is empty, which is
-      // exactly the FHIRPath contract for join() over an empty collection.
+      // exactly the FHIRPath contract for join over an empty collection.
       // The NVL keeps a present-but-null element contributing an empty string
       // so it does not nullify the whole result.
       return `(SELECT LISTAGG(NVL(child.value, ''), ${separator}) WITHIN GROUP (ORDER BY parent.idx, child.idx)
@@ -1896,7 +1960,7 @@ export class FHIRPathToOracleVisitor
   }
 
   private handleWhereFunction(_args: string[]): string {
-    // This should not be called anymore since where() is handled specially in handleFunctionInvocation
+    // This should not be called anymore since where is handled specially in handleFunctionInvocation
     throw new Error(
       "where() function should be handled by handleWhereFunctionInvocation",
     );
@@ -1915,7 +1979,7 @@ export class FHIRPathToOracleVisitor
   }
 
   private handleOfTypeFunction(_args: string[]): string {
-    // This should not be called anymore since ofType() is handled specially in handleOfTypeFunctionInvocation
+    // This should not be called anymore since ofType is handled specially in handleOfTypeFunctionInvocation
     throw new Error(
       "ofType() function should be handled by handleOfTypeFunctionInvocation",
     );
@@ -2017,8 +2081,8 @@ export class FHIRPathToOracleVisitor
     const fmt = formatJsonSuffix(this.storage);
 
     // A JSON_TABLE cannot consume the output of another JSON_TABLE
-    // (ORA-40556). When the source is an extension()/where() scalar subquery
-    // over JSON_TABLE (a chained .extension() call), the nested extension
+    // (ORA-40556). When the source is an extension/where scalar subquery
+    // over JSON_TABLE (a chained .extension call), the nested extension
     // array is extracted with JSON_QUERY inside that subquery and the outer
     // JSON_TABLE iterates the elements of the extracted array.
     if (base.startsWith("(SELECT value FROM JSON_TABLE")) {
@@ -2032,22 +2096,22 @@ export class FHIRPathToOracleVisitor
   }
 
   /**
-   * Generates inline SQL for the FHIRPath `lowBoundary()` / `highBoundary()`
+   * Generates inline SQL for the FHIRPath `lowBoundary` / `highBoundary`
    * functions. The boundary is the least (low) or greatest (high) value
    * consistent with the input's stated precision, expressed at the maximum
    * precision for its FHIR datatype.
    *
-   * The governing datatype is taken from an explicit `ofType()` applied directly
+   * The governing datatype is taken from an explicit `ofType` applied directly
    * to the input where present (`this.context.boundaryType`), otherwise inferred
    * from the value's lexical form at SQL runtime. An absent source element
    * yields SQL NULL for every branch. All logic is emitted inline so
    * the query stays self-contained, requiring no pre-installed database object.
    * @param functionName - Either "lowBoundary" or "highBoundary".
    * @param args - Function arguments; a non-empty list is the unsupported
-   *   explicit-precision form and is rejected.
+   * explicit-precision form and is rejected.
    * @returns A SQL scalar expression computing the boundary value.
-   * @throws If called with an explicit-precision argument, or resolved (via
-   *   ofType) to a datatype for which boundaries are not supported.
+   * @throws {Error} If called with an explicit-precision argument, or resolved
+   * (via ofType) to a datatype for which boundaries are not supported.
    */
   private handleBoundaryFunction(functionName: string, args: string[]): string {
     // The optional explicit-precision argument is out of scope; reject it with a
@@ -2062,7 +2126,7 @@ export class FHIRPathToOracleVisitor
     const value = this.context.iterationContext ?? this.rootJson;
     const resolved = this.context.boundaryType;
 
-    // Datatype known from an explicit ofType() directly on the boundary input.
+    // Datatype known from an explicit ofType directly on the boundary input.
     if (resolved) {
       switch (resolved) {
         case "date": {
@@ -2085,7 +2149,7 @@ export class FHIRPathToOracleVisitor
       }
     }
 
-    // No explicit ofType(): classify the value by its lexical form at runtime.
+    // No explicit ofType: classify the value by its lexical form at runtime.
     return this.lexicalBoundarySql(value, isLow);
   }
 
@@ -2094,8 +2158,9 @@ export class FHIRPathToOracleVisitor
    * form at SQL runtime: a `T` marks a dateTime, a `:` marks a time, an
    * interior `-` marks a date, and anything else is treated as a decimal. NULL
    * propagates to NULL.
-   * @param value
-   * @param isLow
+   * @param value - The SQL expression holding the source value.
+   * @param isLow - True for `lowBoundary`, false for `highBoundary`.
+   * @returns A `CASE` expression yielding the boundary as text.
    */
   private lexicalBoundarySql(value: string, isLow: boolean): string {
     // Every branch must yield the same SQL type: a CASE that mixed the string
@@ -2117,8 +2182,9 @@ export class FHIRPathToOracleVisitor
    * Boundary SQL for a `date` value (maximum precision = day): a partial value
    * is padded to a full date. For `highBoundary`, a year-month resolves to the
    * last day of the month via LAST_DAY. NULL propagates to NULL.
-   * @param value
-   * @param isLow
+   * @param value - The SQL expression holding the date value.
+   * @param isLow - True for `lowBoundary`, false for `highBoundary`.
+   * @returns A `CASE` expression yielding a full `YYYY-MM-DD` date.
    */
   private dateBoundarySql(value: string, isLow: boolean): string {
     if (isLow) {
@@ -2143,8 +2209,9 @@ export class FHIRPathToOracleVisitor
    * A value already carrying a time has its time component padded to
    * millisecond precision and the extreme offset appended; explicit offsets in
    * such values are not exercised by the suite. NULL propagates to NULL.
-   * @param value
-   * @param isLow
+   * @param value - The SQL expression holding the dateTime value.
+   * @param isLow - True for `lowBoundary`, false for `highBoundary`.
+   * @returns A `CASE` expression yielding a full instant with offset.
    */
   private dateTimeBoundarySql(value: string, isLow: boolean): string {
     const tz = isLow ? "+14:00" : "-12:00";
@@ -2163,8 +2230,9 @@ export class FHIRPathToOracleVisitor
    * is padded to `HH:MM:SS.fff`, filling absent components with their minimum
    * (`:00.000`) for `lowBoundary` or maximum (`:59.999`) for `highBoundary`.
    * NULL propagates to NULL.
-   * @param value
-   * @param isLow
+   * @param value - The SQL expression holding the time value.
+   * @param isLow - True for `lowBoundary`, false for `highBoundary`.
+   * @returns A `CASE` expression yielding a millisecond-precision time.
    */
   private timeBoundarySql(value: string, isLow: boolean): string {
     return `CASE
@@ -2176,8 +2244,9 @@ export class FHIRPathToOracleVisitor
   /**
    * Pads a bare time component (`HH:MM` or `HH:MM:SS`) to millisecond precision,
    * filling absent seconds/milliseconds with their minimum or maximum.
-   * @param timeExpr
-   * @param isLow
+   * @param timeExpr - The SQL expression holding the time component.
+   * @param isLow - True for `lowBoundary`, false for `highBoundary`.
+   * @returns A `CASE` expression yielding `HH:MM:SS.fff`.
    */
   private padTimeComponent(timeExpr: string, isLow: boolean): string {
     const seconds = isLow ? ":00.000" : ":59.999";
@@ -2195,8 +2264,9 @@ export class FHIRPathToOracleVisitor
    * `value ∓ 0.5 × 10⁻ᴺ` (e.g. `1.0` → `0.95` / `1.05`). The half-unit delta is
    * built as a decimal literal from the runtime fractional-digit count to avoid
    * relying on POWER's scale behaviour. NULL propagates to NULL.
-   * @param value
-   * @param isLow
+   * @param value - The SQL expression holding the decimal value.
+   * @param isLow - True for `lowBoundary`, false for `highBoundary`.
+   * @returns A numeric SQL expression yielding the boundary value.
    */
   private decimalBoundarySql(value: string, isLow: boolean): string {
     const op = isLow ? "-" : "+";

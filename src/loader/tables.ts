@@ -49,7 +49,7 @@ export interface CreateTableStatements {
 
 /**
  * Qualify a table name with its schema when a schema is given. Identifiers
- * are emitted unquoted (research R7) and must have been validated by the
+ * are emitted unquoted and must have been validated by the
  * caller.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Table name.
@@ -64,7 +64,6 @@ function qualifyTableName(
 
 /**
  * Build the DDL statements for the resources table and its index (DDL per
- * data-model.md).
  *
  * This is a pure function so the generated SQL can be unit-tested without a
  * database. The `json` column is typed with the resolved {@link
@@ -127,7 +126,7 @@ function formatColumnType(
  * Resolve an ALL_TAB_COLUMNS column description to a canonical json type.
  *
  * Only two column shapes can faithfully hold a serialised FHIR resource (the
- * two variants of data-model.md): the BLOB variant (`DATA_TYPE = 'BLOB'`,
+ * two variants): the BLOB variant (`DATA_TYPE = 'BLOB'`,
  * expected to carry the `IS JSON` check constraint) and the native type
  * (`DATA_TYPE = 'JSON'`, 21c+). Any other shape - a bounded `VARCHAR2`, a
  * `CLOB`, and so on - is rejected here rather than silently coerced to a
@@ -138,7 +137,7 @@ function formatColumnType(
  * @param dataType - The ALL_TAB_COLUMNS DATA_TYPE.
  * @param charLength - The ALL_TAB_COLUMNS CHAR_LENGTH, when non-zero.
  * @returns The canonical resource json data type (`BLOB` or `JSON`).
- * @throws Error if the column is neither the BLOB variant nor native `JSON`.
+ * @throws {Error} if the column is neither the BLOB variant nor native `JSON`.
  *   The message names the offending type and the two acceptable types.
  */
 export function resolveColumnJsonDataType(
@@ -162,7 +161,7 @@ export function resolveColumnJsonDataType(
 
 /**
  * Build a warning for an existing table whose json column type differs from
- * the requested type (data-model.md lifecycle: warn naming both types and
+ * the requested type
  * load into the existing table unchanged).
  * @param schemaName - Schema name.
  * @param tableName - Table name.
@@ -189,10 +188,10 @@ export function buildJsonTypeMismatchWarning(
 
 /**
  * Fail fast when native JSON storage is requested from a pre-21c database
- * (FR-014, data-model.md lifecycle).
+ *.
  * @param serverVersion - The database's `oracleServerVersion` (e.g.
  *   1900000000 for 19c).
- * @throws Error naming the required version and the server's version.
+ * @throws {Error} naming the required version and the server's version.
  */
 export function assertNativeJsonSupported(serverVersion: number): void {
   const majorVersion = Math.floor(serverVersion / 100_000_000);
@@ -269,7 +268,7 @@ export async function tableExists(
  * @param tableName - Name of the table.
  * @returns The canonical json column type, or null if the table or its `json`
  *   column does not exist.
- * @throws Error if the column exists but is neither the BLOB variant nor
+ * @throws {Error} if the column exists but is neither the BLOB variant nor
  *   native `JSON` (see {@link resolveColumnJsonDataType}).
  */
 export async function getExistingJsonColumnType(
@@ -321,7 +320,7 @@ export async function getExistingJsonColumnType(
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table.
  * @param requestedType - The requested json column type.
- * @throws Error if the existing `json` column is neither the BLOB variant nor
+ * @throws {Error} if the existing `json` column is neither the BLOB variant nor
  *   native `JSON` (see {@link resolveColumnJsonDataType}).
  */
 export async function warnIfJsonTypeMismatch(
@@ -353,9 +352,9 @@ export async function warnIfJsonTypeMismatch(
 
 /**
  * Fail fast when native JSON storage is requested but the database does not
- * support it (FR-014). Reads the server version from a pooled connection.
+ * support it Reads Reads the server version from a pooled connection.
  * @param pool - Database connection pool.
- * @throws Error when the server is pre-21c; see {@link
+ * @throws {Error} when the server is pre-21c; see {@link
  *   assertNativeJsonSupported}.
  */
 export async function ensureNativeJsonSupported(
@@ -371,7 +370,6 @@ export async function ensureNativeJsonSupported(
 
 /**
  * Create the resources table with an index on resource_type (DDL per
- * data-model.md).
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
  * @param tableName - Name of the table to create.
@@ -432,7 +430,7 @@ export async function truncateTable(
  * column type only governs creation of a new table. An existing table with the
  * other supported storage type yields a warning naming both types, and the
  * existing* column type is returned so rows are bound in a form the column
- * accepts. The native-JSON version gate (FR-014) fires only when a new table
+ * accepts. The native-JSON version gate. fires only when a new table
  * would actually be created as JSON.
  * @param pool - Database connection pool.
  * @param schemaName - Schema name, or undefined for the current schema.
@@ -481,7 +479,7 @@ export async function ensureTable(
   }
 
   // Fail fast before any DDL when native JSON is requested from a pre-21c
-  // server (FR-014, data-model.md lifecycle).
+  // server.
   if (jsonType === "JSON") {
     await ensureNativeJsonSupported(pool);
   }

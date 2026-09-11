@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,11 +20,10 @@
 /**
  * Renders a root Fragment into the final Oracle SELECT statement:
  *
- *   WITH <ctes> SELECT <cols> FROM <root> <fromExtensions> WHERE <pred>
+ * WITH <ctes> SELECT <cols> FROM <root> <fromExtensions> WHERE <pred>
  *
  * Output column aliases are double-quoted to preserve the ViewDefinition's
- * exact column names; base table/column identifiers are unquoted (research
- * R7).
+ * exact column names; base table/column identifiers are unquoted .
  */
 
 import type { TranspilerContext } from "../../fhirpath/transpiler.js";
@@ -49,15 +48,15 @@ export interface RenderOptions {
  * the optional `WHERE` predicate built by `WhereClauseBuilder`.
  *
  * A unionAll scope renders as top-level UNION ALL branches: UNION ALL inside
- * a lateral scope mis-correlates on 19c (research R4). Each branch is a
+ * a lateral scope mis-correlates on 19c. Each branch is a
  * self-contained SELECT from the resource table, and the shared WHERE clause
  * (resource type filter and view-level predicates) is applied to every branch.
  * @param fragment - The root Fragment produced by walking the select tree.
  * @param viewDef - The ViewDefinition supplying the resource type, WHERE
- *   predicates, and other metadata needed to construct the WHERE clause.
+ * predicates, and other metadata needed to construct the WHERE clause.
  * @param options - Render options including table/schema names, resource alias,
- *   optional test-isolation ID, the where-clause builder, and the transpiler
- *   context.
+ * optional test-isolation ID, the where-clause builder, and the transpiler
+ * context.
  * @returns The complete Oracle SELECT statement ready for execution.
  */
 export function renderRoot(

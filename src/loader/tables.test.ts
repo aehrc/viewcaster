@@ -19,8 +19,7 @@
 
 /**
  * Unit tests for pure table DDL generation, existing-column-type resolution,
- * storage-type mismatch warnings and the native-JSON version gate
- * (FR-011/FR-014, data-model.md lifecycle rules).
+ * storage-type mismatch warnings and the native-JSON version gate.
  *
  * These exercise the string-building and comparison logic without a database,
  * so the DDL contract, the storage variants and the fail-fast decisions can be
@@ -153,7 +152,7 @@ describe("resolveColumnJsonDataType", () => {
   // type cannot faithfully hold a serialised FHIR resource. Such a column must
   // be rejected at the boundary, naming the offending type, rather than
   // silently coerced - coercion would let the loader write into a column that
-  // cannot hold the data (data-model.md lifecycle table).
+  // cannot hold the data.
   describe("rejects column types that cannot hold a FHIR resource", () => {
     it("throws for CLOB, naming the offending type", () => {
       expect(() => resolveColumnJsonDataType("CLOB", 0)).toThrow(/CLOB/);

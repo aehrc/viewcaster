@@ -148,8 +148,7 @@ export function printSimpleProgress(progress: LoaderProgress): void {
 }
 
 /**
- * Build the load result from the progress tracker (contracts/api.md
- * `LoadResult`).
+ * Build the load result from the progress tracker.
  * @param progress - Progress tracker.
  * @returns The load result with one entry per file.
  */

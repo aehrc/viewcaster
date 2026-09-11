@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Parses and interprets FHIRPath expressions for SQL generation.
  */
@@ -45,8 +64,9 @@ export class PathParser {
 
   /**
    * Find the matching closing parenthesis for .where() using balanced counting.
-   * @param path
-   * @param whereStart
+   * @param path - The FHIRPath expression.
+   * @param whereStart - The position after ".where(".
+   * @returns The index of the matching closing parenthesis, or -1 if not found.
    */
   private findWhereClosingParen(path: string, whereStart: number): number {
     let parenCount = 0;
@@ -67,8 +87,10 @@ export class PathParser {
 
   /**
    * Transpile a where condition to SQL.
-   * @param condition
-   * @param context
+   * @param condition - The FHIRPath condition expression from within .where().
+   * @param context - The transpiler context carrying storage type and constants.
+   * @returns The SQL expression for the condition.
+   * @throws {Error} when the condition cannot be transpiled.
    */
   private transpileWhereCondition(
     condition: string,
@@ -92,8 +114,9 @@ export class PathParser {
   /**
    * Parse FHIRPath .where() function from a forEach path.
    * Transpiles the where condition to SQL using the FHIRPath transpiler.
-   * @param path
-   * @param context
+   * @param path - The FHIRPath expression potentially containing .where() and .first().
+   * @param context - The transpiler context carrying storage type and constants.
+   * @returns The parsed path with where condition and first-element flag.
    */
   parseFhirPathWhere(
     path: string,
@@ -142,7 +165,8 @@ export class PathParser {
   /**
    * Parse array indexing from a forEach path.
    * For paths like "contact.telecom[0]", interpret as "contact[0].telecom[0]" - apply index to all array segments.
-   * @param path
+   * @param path - The FHIRPath expression with optional array index.
+   * @returns The parsed path and array index.
    */
   parseArrayIndexing(path: string): ArrayIndexingResult {
     const match = /^(.+)\[(\d+)]$/.exec(path);
@@ -181,7 +205,8 @@ export class PathParser {
 
   /**
    * Parse array indexing from a path segment.
-   * @param pathSegment
+   * @param pathSegment - A single path segment with optional array index.
+   * @returns The segment without indexing and the extracted index.
    */
   parseSegmentIndexing(pathSegment: string): SegmentIndexingResult {
     const segmentMatch = /^(.+)\[(\d+)]$/.exec(pathSegment);
@@ -194,7 +219,8 @@ export class PathParser {
   /**
    * Detect if a forEach path requires array flattening.
    * Returns array of path segments that are arrays in FHIR Patient resource.
-   * @param path
+   * @param path - The FHIRPath expression.
+   * @returns Array of path segments that correspond to FHIR array fields.
    */
   detectArrayFlatteningPaths(path: string): string[] {
     const segments = path.split(".");
@@ -214,8 +240,9 @@ export class PathParser {
 
   /**
    * Extract path segment for a specific level in array paths.
-   * @param arrayPaths
-   * @param index
+   * @param arrayPaths - Array of paths to array fields from detectArrayFlatteningPaths.
+   * @param index - The level index to extract.
+   * @returns The path segment relative to the previous level.
    */
   extractPathSegment(arrayPaths: string[], index: number): string {
     const fullPath = arrayPaths[index];

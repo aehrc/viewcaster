@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -25,7 +25,7 @@
  * union branch (unionAll rows carry the enclosing scope's columns), and the
  * merged result is the union fragment. When one sibling is a nested repeat
  * whose spine CTE anchored on the enclosing repeat CTE, the remaining
- * siblings are re-pointed onto the spine CTE first (research R4).
+ * siblings are re-pointed onto the spine CTE first.
  */
 
 import type { Context, Fragment, RebaseInfo } from "./types.js";
@@ -70,10 +70,10 @@ export function applyTextReplacements(
  * walker can drop its own join.
  * @param fragments - Ordered array of sibling Fragments to merge.
  * @param ctx - The context of the parent Group node, used to supply
- *   `partitionKeys` for the merged result.
+ * `partitionKeys` for the merged result.
  * @returns A single merged Fragment.
- * @throws When two union fragments appear in the same scope, or when two
- *   spine-rebasing repeats appear at the same level (not supported).
+ * @throws {Error} when two union fragments appear in the same scope, or when two
+ * spine-rebasing repeats appear at the same level (not supported).
  */
 export function mergeSiblings(fragments: Fragment[], ctx: Context): Fragment {
   if (fragments.length === 0) {

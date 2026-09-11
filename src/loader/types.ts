@@ -23,12 +23,11 @@
  */
 
 /**
- * Database connection configuration (contracts/api.md `DatabaseOptions`).
+ * Database connection configuration.
  *
  * An explicit {@link DatabaseOptions.connectString} overrides the EZConnect
  * string assembled from {@link DatabaseOptions.host}, {@link
- * DatabaseOptions.port} and {@link DatabaseOptions.serviceName} (research
- * R13).
+ * DatabaseOptions.port} and {@link DatabaseOptions.serviceName}.
  */
 export interface DatabaseOptions {
   /** Database host (default: `localhost`; env `ORACLE_HOST`). */
@@ -78,7 +77,7 @@ export interface DiscoveryResult {
 }
 
 /**
- * Options for the NDJSON loader (contracts/api.md `LoadOptions`).
+ * Options for the NDJSON loader.
  */
 export interface LoadOptions {
   /** Directory containing NDJSON files. */
@@ -170,7 +169,7 @@ export interface FileLoadResult {
 }
 
 /**
- * Result of a loading operation (contracts/api.md `LoadResult`).
+ * Result of a loading operation.
  */
 export interface LoadResult {
   /** Per-file outcome, one entry per loaded file. */

@@ -55,9 +55,10 @@ function jsonBindDef(jsonType: ResourceJsonDataType): oracledb.BindDefinition {
  * driver can encode the value; a malformed line therefore throws here for
  * JSON storage, while BLOB storage defers well-formedness to the database's
  * `IS JSON` constraint.
- * @param line
+ * @param line - The raw NDJSON line to parse and bind.
  * @param jsonType - The storage type of the target column.
- * @throws Error when the line is not well-formed JSON in native JSON mode.
+ * @returns The bind value for the json column: a UTF-8 Buffer for BLOB storage, or a parsed object for JSON storage.
+ * @throws {Error} when the line is not well-formed JSON in native JSON mode.
  */
 function toBindValue(
   line: string,

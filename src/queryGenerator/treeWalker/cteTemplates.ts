@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -44,7 +44,7 @@ export interface BuildRepeatCteArgs {
   /** Partition keys propagated through anchor and recursive members. */
   partitionKeys: PartitionKey[];
   /**
-   * Spine mode (research R4): the anchor reads an enclosing repeat CTE
+   * Spine mode: the anchor reads an enclosing repeat CTE
    * (`FROM <baseAlias>`) instead of the resource table. `baseAlias` and the
    * trace APPLY aliases are the only outer expressions in scope for anchor
    * projections; partition key expressions referencing anything else are
@@ -70,8 +70,8 @@ export interface BuildRepeatCteArgs {
  * `CROSS APPLY JSON_TABLE` calls.
  * @param args - Parameters controlling CTE generation.
  * @returns A `CteDefinition` with `alias` set to `args.cteAlias` and `body`
- *   containing the full anchor + recursive SQL (without the outer
- *   `alias AS (...)` wrapper, which `renderRoot` adds).
+ * containing the full anchor + recursive SQL (without the outer
+ * `alias AS (...)` wrapper, which `renderRoot` adds).
  */
 export function buildRepeatCte(args: BuildRepeatCteArgs): CteDefinition {
   const anchor = buildAnchorMember(args);

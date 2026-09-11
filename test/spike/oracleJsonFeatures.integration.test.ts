@@ -18,12 +18,11 @@
  */
 
 /**
- * Behaviour spike for the Oracle JSON features the transpiler relies on
- * (research R3, R5, R6). Runs against whichever Oracle the `ORACLE_*`
- * environment points at and exercises both storage variants where the version
- * allows. Assertions pin the behaviours the emission design depends on;
- * version-dependent observations are logged so CI runs on other versions can
- * be compared with the recorded results in research.md.
+ * Behaviour spike for the Oracle JSON features the transpiler relies on.
+ * Runs against whichever Oracle the `ORACLE_*` environment points at and
+ * exercises both storage variants where the version allows. Assertions pin
+ * the behaviours the emission design depends on; version-dependent observations
+ * are logged so CI runs on other versions can be compared for consistency.
  *
  * Deliberately absent: `RETURNING VARCHAR2(32767)` with values over 4,000
  * bytes. On 19c (MAX_STRING_SIZE=STANDARD) sorting such a value raises
@@ -122,7 +121,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
   ];
 
   describe.each(variants)("$storageType storage", ({ storageType, table }) => {
-    // FORMAT JSON is emitted only for BLOB storage (research R3).
+    // FORMAT JSON is emitted only for BLOB storage.
     const fj = storageType === "BLOB" ? " FORMAT JSON" : "";
     let supported = true;
 
@@ -167,7 +166,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       return outcome;
     }
 
-    it("R3: accepts FORMAT JSON on the column and tolerates its absence", async (context) => {
+    it("Accepts FORMAT JSON on the column and tolerates its absence", async (context) => {
       if (!supported) return context.skip();
       const withFormat = await observe(
         "JSON_VALUE with FORMAT JSON",
@@ -181,7 +180,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       expect(withoutFormat.rows?.map((row) => row.v)).toEqual(["p1", "p2"]);
     });
 
-    it("R5: JSON_VALUE defaults to VARCHAR2(4000) and yields NULL for longer strings", async (context) => {
+    it("JSON_VALUE defaults to VARCHAR2(4000) and yields NULL for longer strings", async (context) => {
       if (!supported) return context.skip();
       const long = await observe(
         "long string default",
@@ -200,7 +199,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       expect(truncated.rows?.[0]?.l).toBe(4000);
     });
 
-    it("R5: RETURNING CLOB extracts long strings but cannot be compared", async (context) => {
+    it("RETURNING CLOB extracts long strings but cannot be compared", async (context) => {
       if (!supported) return context.skip();
       const clob = await observe(
         "long string RETURNING CLOB",
@@ -219,7 +218,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       expect(inUnion.error).toMatch(/^ORA-(00932|22848)$/);
     });
 
-    it("R5: RETURNING NUMBER converts JSON numbers and nulls non-numeric text", async (context) => {
+    it("RETURNING NUMBER converts JSON numbers and nulls non-numeric text", async (context) => {
       if (!supported) return context.skip();
       const numbers = await observe(
         "RETURNING NUMBER",
@@ -228,7 +227,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       expect(numbers.rows?.[0]).toEqual({ n: 3, s: null });
     });
 
-    it("R6: booleans extract as text and map to NUMBER(1) via CASE", async (context) => {
+    it("Booleans extract as text and map to NUMBER(1) via CASE", async (context) => {
       if (!supported) return context.skip();
       const text = await observe(
         "boolean default",
@@ -255,7 +254,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       );
     });
 
-    it("R4: CROSS APPLY and OUTER APPLY JSON_TABLE with FOR ORDINALITY", async (context) => {
+    it("CROSS APPLY and OUTER APPLY JSON_TABLE with FOR ORDINALITY", async (context) => {
       if (!supported) return context.skip();
       const cross = await observe(
         "CROSS APPLY JSON_TABLE",
@@ -276,7 +275,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       ]);
     });
 
-    it("R4: nested JSON_TABLE must not consume another JSON_TABLE column directly", async (context) => {
+    it("Nested JSON_TABLE must not consume another JSON_TABLE column directly", async (context) => {
       if (!supported) return context.skip();
       const outerApply = `CROSS APPLY JSON_TABLE(t.json${fj}, '$.name[*]' COLUMNS (idx FOR ORDINALITY, item VARCHAR2(4000) FORMAT JSON PATH '$')) n`;
       const direct = await observe(
@@ -312,7 +311,7 @@ describe.skipIf(!hasOracleEnvironment())("Oracle JSON feature spike", () => {
       ]);
     });
 
-    it("R8: an empty JSON string extracts as NULL but still exists", async (context) => {
+    it("An empty JSON string extracts as NULL but still exists", async (context) => {
       if (!supported) return context.skip();
       const empty = await observe(
         "empty string",

@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ * https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Walker for Repeat nodes - emits a recursive CTE and returns a set Fragment.
  *
@@ -8,7 +27,7 @@
  *
  * When the scope already descends from another repeat CTE (a nested repeat),
  * the CTE is emitted as a single "spine" recursion anchored on the enclosing
- * CTE instead of the resource table (research R4, ORA-32036): a lateral
+ * CTE instead of the resource table: a lateral
  * recursive CTE cannot be referenced more than once per query block on 19c,
  * so the enclosing CTE is referenced exactly once - inside the spine anchor -
  * and its context columns are carried through the recursion.
@@ -58,18 +77,18 @@ export interface RepeatDeps {
  * expressions, because a top-level UNION ALL over the same lateral recursive
  * CTE raises ORA-32036 on 19c.
  * @param node - The Repeat select node; `node.repeat` supplies the ordered
- *   list of FHIRPath strings used as the anchor and recursive paths.
+ * list of FHIRPath strings used as the anchor and recursive paths.
  * @param ctx - The current walker context; the inner context is derived from
- *   it by updating `source`, `partitionKeys`, `ancestorApplies`, `spine`, and
- *   `transpilerCtx`.
+ * it by updating `source`, `partitionKeys`, `ancestorApplies`, `spine`, and
+ * `transpilerCtx`.
  * @param walk - The recursive walk function used to visit the inner sub-tree
- *   (`column`, `select`, `unionAll`) in the repeat-item context.
+ * (`column`, `select`, `unionAll`) in the repeat-item context.
  * @param deps - Schema and table name needed to construct the resource FROM
- *   clause inside the CTE anchor.
+ * clause inside the CTE anchor.
  * @returns A Fragment whose `ctes` list begins with the recursive CTE,
- *   `fromExtensions` begins with the INNER JOIN to that CTE (omitted when the
- *   inner sub-tree rebased onto the spine), and `columns` are those produced
- *   by the inner walk.
+ * `fromExtensions` begins with the INNER JOIN to that CTE (omitted when the
+ * inner sub-tree rebased onto the spine), and `columns` are those produced
+ * by the inner walk.
  * @throws {Error} When `node.repeat` is absent or empty.
  */
 export function walkRepeat(
@@ -190,14 +209,14 @@ export function walkRepeat(
  * non-correlated row-duplicating CROSS APPLY assigns each branch a number and
  * a CASE expression picks the branch's projection. A top-level UNION ALL of
  * the branches would reference the lateral recursive CTE once per branch and
- * raise ORA-32036 on 19c (research R4). Branches with their own APPLY chains
+ * raise ORA-32036 on 19c. Branches with their own APPLY chains
  * fall back to the top-level UNION ALL emission (not exercised by the suite;
  * such a query cannot reference the recursive CTE twice on 19c anyway).
  * @param inner - The union Fragment returned by the inner walk.
  * @param cte - This repeat's recursive CTE definition.
  * @param innerCtx - The repeat's inner context (post-recursion scope).
  * @returns A Fragment carrying either the merged single-SELECT projection or
- *   the propagated union branches with the CTE hoisted.
+ * the propagated union branches with the CTE hoisted.
  */
 function mergeRepeatUnion(
   inner: Fragment & { branches: Fragment[] },
@@ -367,8 +386,9 @@ function buildRepeatInnerCtx(
  * fragments in the enclosing scope are re-pointed from the outer repeat CTE
  * (and trace aliases) onto the spine CTE's carried columns, and their JOIN
  * clauses referencing those aliases are dropped.
- * @param ctx
- * @param cteAlias
+ * @param ctx - The walker context carrying partition keys, spine, and trace info.
+ * @param cteAlias - The alias of the spine CTE.
+ * @returns Rebase information with spine alias, base alias, ancestor aliases, and text replacements.
  */
 function buildRebaseInfo(ctx: Context, cteAlias: string): RebaseInfo {
   const spine = ctx.spine;

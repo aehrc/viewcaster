@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Walker for ForEach / ForEachOrNull nodes.
  *
@@ -165,12 +184,13 @@ function buildInnerCtx(
  * Builds the CROSS/OUTER APPLY clause string for a forEach path, handling
  * `.where()`, `.first()`, array indexing, and multi-segment array
  * flattening.
- * @param rawPath
- * @param source
- * @param alias
- * @param applyType
- * @param transpilerCtx
- * @param pathParser
+ * @param rawPath - The FHIRPath expression with potential .where() and .first().
+ * @param source - The JSON source expression (base table column or previous APPLY result).
+ * @param alias - The JSON_TABLE alias for this APPLY.
+ * @param applyType - "CROSS APPLY" or "OUTER APPLY" depending on nullability.
+ * @param transpilerCtx - The transpiler context carrying storage type and constants.
+ * @param pathParser - The path parser for condition transpilation and array detection.
+ * @returns The APPLY clause string.
  */
 function buildForEachApply(
   rawPath: string,
@@ -277,9 +297,8 @@ function buildSimpleApply(
  * @param pathParser - The path parser for segment handling.
  * @param _arrayIndex - An explicit array index for the last level (currently
  *   unhandled for nested paths; suite paths do not exercise it).
- * @param _whereCondition - A predicate for the last level (reserved).
- * @param whereCondition
- * @param transpilerCtx
+ * @param whereCondition - A predicate for the last level, or null.
+ * @param transpilerCtx - The transpiler context carrying storage type and constants.
  * @returns The chained APPLY clauses.
  */
 function buildNestedApply(

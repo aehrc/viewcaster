@@ -18,8 +18,7 @@
  */
 
 /**
- * Database-backed integration tests for the loader's JSON storage variants
- * (data-model.md lifecycle table, FR-011/FR-014).
+ * Database-backed integration tests for the loader's JSON storage variants.
  *
  * Exercises the loader end to end against a real Oracle database: the default
  * `BLOB IS JSON` column (19c+, every supported version) and the native `JSON`
@@ -52,110 +51,109 @@ const oracleAvailable = (() => {
 beforeAll(() => harness.connect());
 afterAll(() => harness.cleanup());
 
+describe.skipIf(!oracleAvailable)("loadNdjsonFiles json column type", () => {
+  it("creates a BLOB IS JSON column and loads every row when the type is omitted", async () => {
+    // The default path must work on every supported version.
+    const tableName = harness.makeTableName();
+    const result = await harness.loadSample(tableName);
+
+    expect(result.failed).toBe(false);
+    expect(result.totalRows).toBe(SAMPLE_PATIENTS.length);
+
+    const columnType = await harness.getJsonColumnType(tableName);
+    expect(columnType?.dataType).toBe("BLOB");
+
+    expect(await harness.getRowCount(tableName)).toBe(SAMPLE_PATIENTS.length);
+  });
+
+  it("round-trips resources byte-equivalent through the BLOB column", async () => {
+    // BLOB storage must round-trip byte-equivalent, including
+    // multi-byte characters and resources larger than 32 KiB.
+    const tableName = harness.makeTableName();
+    const largeText = "x".repeat(40_000);
+    const resources = [
+      { resourceType: "Patient", id: "u1", text: "Café Ünïcode 🩺 中文" },
+      { resourceType: "Patient", id: "big", text: largeText },
+    ];
+    const directory = harness.writeNdjsonDir({
+      "Patient.ndjson": resources.map((resource) => JSON.stringify(resource)),
+    });
+    const loadResult = await harness.loadDir(directory, tableName);
+    expect(loadResult.failed).toBe(false);
+    expect(loadResult.totalRows).toBe(2);
+
+    const connection = await harness.pool().getConnection();
+    try {
+      const queryResult = await connection.execute<{
+        JSON: Buffer;
+      }>(
+        `SELECT json FROM ${tableName} ORDER BY id`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+      const blobs = queryResult.rows?.map((row) => row.JSON) ?? [];
+      expect(blobs).toHaveLength(2);
+      expect(blobs[0].toString("utf8")).toBe(JSON.stringify(resources[0]));
+      expect(blobs[1].toString("utf8")).toBe(JSON.stringify(resources[1]));
+    } finally {
+      await connection.close();
+    }
+  });
+
+  it("creates a native JSON column and loads every row when JSON is requested", async (ctx) => {
+    if (harness.getMajorVersion() < 21) {
+      // eslint-disable-next-line vitest/no-disabled-tests -- runtime gate, not a disabled test
+      ctx.skip();
+    }
+    const tableName = harness.makeTableName();
+    const result = await harness.loadSample(tableName, {
+      resourceJsonDataType: "JSON",
+    });
+
+    expect(result.failed).toBe(false);
+    expect(result.totalRows).toBe(SAMPLE_PATIENTS.length);
+
+    const columnType = await harness.getJsonColumnType(tableName);
+    expect(columnType?.dataType).toBe("JSON");
+
+    expect(await harness.getRowCount(tableName)).toBe(SAMPLE_PATIENTS.length);
+
+    // Value round-trip: the resource is readable through the native type.
+    const connection = await harness.pool().getConnection();
+    try {
+      const queryResult = await connection.execute<{ ID: string }>(
+        `SELECT JSON_VALUE(json, '$.id') AS id FROM ${tableName} ORDER BY id`,
+        {},
+        { outFormat: oracledb.OUT_FORMAT_OBJECT },
+      );
+      const ids = queryResult.rows?.map((row) => row.ID) ?? [];
+      expect(ids).toEqual(["p1", "p2", "p3"]);
+    } finally {
+      await connection.close();
+    }
+  });
+
+  it("accepts a lower-case json value and still creates the native type", async (ctx) => {
+    if (harness.getMajorVersion() < 21) {
+      // eslint-disable-next-line vitest/no-disabled-tests -- runtime gate, not a disabled test
+      ctx.skip();
+    }
+    const tableName = harness.makeTableName();
+    await harness.loadSample(tableName, { resourceJsonDataType: "json" });
+    const columnType = await harness.getJsonColumnType(tableName);
+    expect(columnType?.dataType).toBe("JSON");
+  });
+
+  it("accepts a lower-case blob value and still creates the BLOB variant", async () => {
+    const tableName = harness.makeTableName();
+    await harness.loadSample(tableName, { resourceJsonDataType: "blob" });
+    const columnType = await harness.getJsonColumnType(tableName);
+    expect(columnType?.dataType).toBe("BLOB");
+  });
+});
+
 describe.skipIf(!oracleAvailable)(
-  "loadNdjsonFiles json column type (US2)",
-  () => {
-    it("creates a BLOB IS JSON column and loads every row when the type is omitted", async () => {
-      // The default path must work on every supported version (FR-011).
-      const tableName = harness.makeTableName();
-      const result = await harness.loadSample(tableName);
-
-      expect(result.failed).toBe(false);
-      expect(result.totalRows).toBe(SAMPLE_PATIENTS.length);
-
-      const columnType = await harness.getJsonColumnType(tableName);
-      expect(columnType?.dataType).toBe("BLOB");
-
-      expect(await harness.getRowCount(tableName)).toBe(SAMPLE_PATIENTS.length);
-    });
-
-    it("round-trips resources byte-equivalent through the BLOB column", async () => {
-      // data-model.md: BLOB storage must round-trip byte-equivalent, including
-      // multi-byte characters and resources larger than 32 KiB.
-      const tableName = harness.makeTableName();
-      const largeText = "x".repeat(40_000);
-      const resources = [
-        { resourceType: "Patient", id: "u1", text: "Café Ünïcode 🩺 中文" },
-        { resourceType: "Patient", id: "big", text: largeText },
-      ];
-      const directory = harness.writeNdjsonDir({
-        "Patient.ndjson": resources.map((resource) => JSON.stringify(resource)),
-      });
-      const loadResult = await harness.loadDir(directory, tableName);
-      expect(loadResult.failed).toBe(false);
-      expect(loadResult.totalRows).toBe(2);
-
-      const connection = await harness.pool().getConnection();
-      try {
-        const queryResult = await connection.execute<{
-          JSON: Buffer;
-        }>(
-          `SELECT json FROM ${tableName} ORDER BY id`,
-          {},
-          { outFormat: oracledb.OUT_FORMAT_OBJECT },
-        );
-        const blobs = queryResult.rows?.map((row) => row.JSON) ?? [];
-        expect(blobs).toHaveLength(2);
-        expect(blobs[0].toString("utf8")).toBe(JSON.stringify(resources[0]));
-        expect(blobs[1].toString("utf8")).toBe(JSON.stringify(resources[1]));
-      } finally {
-        await connection.close();
-      }
-    });
-
-    it("creates a native JSON column and loads every row when JSON is requested", async (ctx) => {
-      if (harness.getMajorVersion() < 21) {
-        ctx.skip();
-      }
-      const tableName = harness.makeTableName();
-      const result = await harness.loadSample(tableName, {
-        resourceJsonDataType: "JSON",
-      });
-
-      expect(result.failed).toBe(false);
-      expect(result.totalRows).toBe(SAMPLE_PATIENTS.length);
-
-      const columnType = await harness.getJsonColumnType(tableName);
-      expect(columnType?.dataType).toBe("JSON");
-
-      expect(await harness.getRowCount(tableName)).toBe(SAMPLE_PATIENTS.length);
-
-      // Value round-trip: the resource is readable through the native type.
-      const connection = await harness.pool().getConnection();
-      try {
-        const queryResult = await connection.execute<{ ID: string }>(
-          `SELECT JSON_VALUE(json, '$.id') AS id FROM ${tableName} ORDER BY id`,
-          {},
-          { outFormat: oracledb.OUT_FORMAT_OBJECT },
-        );
-        const ids = queryResult.rows?.map((row) => row.ID) ?? [];
-        expect(ids).toEqual(["p1", "p2", "p3"]);
-      } finally {
-        await connection.close();
-      }
-    });
-
-    it("accepts a lower-case json value and still creates the native type", async (ctx) => {
-      if (harness.getMajorVersion() < 21) {
-        ctx.skip();
-      }
-      const tableName = harness.makeTableName();
-      await harness.loadSample(tableName, { resourceJsonDataType: "json" });
-      const columnType = await harness.getJsonColumnType(tableName);
-      expect(columnType?.dataType).toBe("JSON");
-    });
-
-    it("accepts a lower-case blob value and still creates the BLOB variant", async () => {
-      const tableName = harness.makeTableName();
-      await harness.loadSample(tableName, { resourceJsonDataType: "blob" });
-      const columnType = await harness.getJsonColumnType(tableName);
-      expect(columnType?.dataType).toBe("BLOB");
-    });
-  },
-);
-
-describe.skipIf(!oracleAvailable)(
-  "loadNdjsonFiles existing json column lifecycle (data-model.md)",
+  "loadNdjsonFiles existing json column lifecycle",
   () => {
     it("warns on the other supported storage type and loads into the table unchanged", async () => {
       // First load creates the table as the default BLOB.
@@ -213,6 +211,7 @@ describe.skipIf(!oracleAvailable)(
 
     it("fails fast naming 21c when native JSON is requested on a pre-21c server", async (ctx) => {
       if (harness.getMajorVersion() >= 21) {
+        // eslint-disable-next-line vitest/no-disabled-tests -- runtime gate, not a disabled test
         ctx.skip();
       }
       const tableName = harness.makeTableName();

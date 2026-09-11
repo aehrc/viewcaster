@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Custom Vitest reporter for SQL-on-FHIR test result collection.
  *
@@ -40,9 +59,9 @@ class SqlOnFhirReporter implements Reporter {
 
   /**
    * Called when all tests have finished running.
-   * @param files
-   * @param _errors
-   * @param _coverage
+   * @param files - Test files that were executed.
+   * @param _errors - Errors that occurred during test run (unused).
+   * @param _coverage - Coverage data collected during test run (unused).
    * @deprecated use onTestRunEnd instead
    */
   onFinished(
@@ -73,7 +92,7 @@ class SqlOnFhirReporter implements Reporter {
 
   /**
    * Print a summary of test results to the console.
-   * @param files
+   * @param files - Test files that were executed.
    */
   private printTestSummary(files: RunnerTestFile[]): void {
     const stats = this.calculateTestStatistics(files);
@@ -101,7 +120,8 @@ class SqlOnFhirReporter implements Reporter {
 
   /**
    * Calculate test statistics from Vitest task results.
-   * @param files
+   * @param files - Test files that were executed.
+   * @returns Object containing counts of passed, failed, skipped, and total tests.
    */
   private calculateTestStatistics(files: RunnerTestFile[]): {
     passed: number;
@@ -131,10 +151,10 @@ class SqlOnFhirReporter implements Reporter {
       total: passed + failed + skipped,
     };
   }
-
   /**
    * Recursively count test results in a task.
-   * @param task
+   * @param task - The Vitest task to count test results from.
+   * @returns Object containing counts of passed, failed, and skipped tests.
    */
   private countTestsInTask(task: RunnerTask): {
     passed: number;
@@ -167,7 +187,7 @@ class SqlOnFhirReporter implements Reporter {
 
   /**
    * Write the test report to a JSON file.
-   * @param outputPath
+   * @param outputPath - The file path where the test report JSON will be written.
    */
   writeReport(outputPath: string): void {
     try {
@@ -185,7 +205,7 @@ class SqlOnFhirReporter implements Reporter {
   /**
    * Collect test results from Vitest task results as fallback.
    * Groups tests by their source file (e.g., "basic.json", "collection.json").
-   * @param files
+   * @param files - Test files that were executed.
    */
   private collectFromVitestTasks(files: RunnerTestFile[]): void {
     for (const file of files) {
@@ -205,7 +225,7 @@ class SqlOnFhirReporter implements Reporter {
   /**
    * Collect tests from the parent "SQL on FHIR compliance tests" suite.
    * Processes child suites and groups tests by filename.
-   * @param parentSuite
+   * @param parentSuite - The parent test suite containing child suites.
    */
   private collectTestsFromParentSuite(parentSuite: RunnerTask): void {
     if (!("tasks" in parentSuite) || !parentSuite.tasks) return;
@@ -226,15 +246,15 @@ class SqlOnFhirReporter implements Reporter {
       }
     }
   }
-
   /**
    * Collect test results from a test suite.
    *
    * Note: This is a fallback mechanism. The primary test result collection
    * happens in the DynamicVitestGenerator which stores results in global.testResults.
    * This method extracts the plain test title from the formatted test name.
-   * @param suite The test suite to collect from
-   * @param recursive Whether to recursively collect from nested suites
+   * @param suite - The test suite to collect from.
+   * @param recursive - Whether to recursively collect from nested suites.
+   * @returns Array of test report entries collected from the suite.
    */
   private collectTestsFromSuite(
     suite: RunnerTask,
@@ -262,12 +282,12 @@ class SqlOnFhirReporter implements Reporter {
 
     return tests;
   }
-
   /**
    * Extract the plain test title from a formatted test name.
    * Formatted: "(suite) title #tag1 #tag2"
    * Plain: "title"
-   * @param formattedName
+   * @param formattedName - The formatted test name to extract the title from.
+   * @returns The plain test title without suite prefix and tags.
    */
   private extractPlainTitle(formattedName: string): string {
     // Remove suite prefix: "(suite) " -> ""

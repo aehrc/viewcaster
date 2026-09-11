@@ -56,8 +56,7 @@ function getDryRunDatabaseConfig(commandOptions: Record<string, unknown>): {
 
 /**
  * Resolve the requested resource JSON data type from the command options and
- * its environment fallback (contracts/cli.md:
- * `ORACLE_RESOURCE_JSON_DATA_TYPE`), rejecting invalid values before any
+ * its environment fallback (`ORACLE_RESOURCE_JSON_DATA_TYPE`), rejecting invalid values before any
  * database connection is opened.
  * @param commandOptions - Command options.
  * @returns The normalised storage type, or undefined for the loader default.
@@ -133,7 +132,6 @@ async function handleLoadCommand(
     const result = await loadNdjsonFiles(options);
 
     // Non-zero exit when any file failed, even with --continue-on-error
-    // (contracts/cli.md).
     if (result.failed) {
       process.exit(1);
     }

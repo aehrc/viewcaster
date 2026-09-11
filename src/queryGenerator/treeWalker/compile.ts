@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Public entry point for the tree-walker query generator.
  *
@@ -38,8 +57,9 @@ export interface CompileOptions {
 /**
  * Compiles a ViewDefinition into an Oracle SQL query string and column
  * metadata.
- * @param viewDef
- * @param options
+ * @param viewDef - The ViewDefinition to compile.
+ * @param options - Compilation options including table/schema names and transpiler context.
+ * @returns The SQL query string and column metadata.
  */
 export function compileViewDefinition(
   viewDef: ViewDefinition,
@@ -92,7 +112,8 @@ function buildRootContext(
  * Walk the select tree and collect ColumnInfo metadata in lexical order.
  * Mirrors the behaviour of QueryGenerator.collectAllColumns so the public
  * TranspilationResult.columns shape is unchanged.
- * @param selects
+ * @param selects - The select items to collect column metadata from.
+ * @returns Array of ColumnInfo objects in lexical order.
  */
 function collectColumnMetadata(selects: ViewDefinitionSelect[]): ColumnInfo[] {
   const out: ColumnInfo[] = [];

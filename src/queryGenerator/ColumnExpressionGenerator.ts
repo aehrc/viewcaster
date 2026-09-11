@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -20,8 +20,7 @@
 /**
  * Generates SQL expressions for ViewDefinition columns.
  *
- * The default type mapping treats text as the preservation medium (research
- * R9): boolean becomes a CASE over the 'true'/'false' text yielding
+ * The default type mapping treats text as the preservation medium : boolean becomes a CASE over the 'true'/'false' text yielding
  * NUMBER(1), and numeric/temporal FHIR types are CAST to their Oracle
  * equivalents from the extracted text.
  */
@@ -40,8 +39,8 @@ export class ColumnExpressionGenerator {
    * @param column - The ViewDefinition column descriptor.
    * @param context - The transpiler context (aliases, storage type).
    * @returns The SQL expression for the column.
-   * @throws When the column's FHIRPath cannot be transpiled; the message
-   *   names the column and path (FR-004).
+   * @throws {Error} when the column's FHIRPath cannot be transpiled; the message
+   * names the column and path.
    */
   generateExpression(
     column: ViewDefinitionColumn,
@@ -72,12 +71,12 @@ export class ColumnExpressionGenerator {
   /**
    * Apply type casting to an expression.
    *
-   * Type precedence (FR-006): oracle/type > ansi/type > FHIR type defaults.
+   * Type precedence: oracle/type > ansi/type > FHIR type defaults.
    * Casting applies only to text-extracted values; expressions already
    * yielding SQL-native values (e.g. `%rowIndex` arithmetic) stand.
    * @param expression - The SQL expression yielding the raw value.
    * @param column - The ViewDefinition column descriptor carrying the type
-   *   and tags.
+   * and tags.
    * @returns The expression cast to the mapped Oracle type.
    */
   private applyTypeCasting(
@@ -109,7 +108,7 @@ export class ColumnExpressionGenerator {
    * Generate a CASE expression for boolean conversion.
    * Handles both simple JSON_VALUE fields and boolean expressions.
    * @param expression - The SQL expression yielding 'true'/'false' or a
-   *   boolean predicate.
+   * boolean predicate.
    * @returns A CASE expression yielding 1/0/NULL.
    */
   private generateBooleanCaseExpression(expression: string): string {

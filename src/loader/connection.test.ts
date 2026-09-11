@@ -18,7 +18,7 @@
  */
 
 /**
- * Unit tests for loader connection configuration (FR-012, research R13):
+ * Unit tests for loader connection configuration:
  * EZConnect string assembly, `ORACLE_*` environment fallbacks, the
  * `--connect-string` override, and missing-credential errors. These exercise
  * the pure configuration logic without opening a database connection.
@@ -44,7 +44,7 @@ describe("buildConnectString", () => {
   });
 
   it("applies the documented defaults for host, port and service name", () => {
-    // contracts/cli.md: host defaults to localhost, port to 1521 and the
+    // Host defaults to localhost, port to 1521 and the
     // service name to FREEPDB1.
     expect(buildConnectString({})).toBe("localhost:1521/FREEPDB1");
   });

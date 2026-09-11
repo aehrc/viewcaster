@@ -6,7 +6,7 @@
  * use this file except in compliance with the License. You may obtain a copy
  * of the License at
  *
- *     https://www.apache.org/licenses/LICENSE-2.0
+ * https://www.apache.org/licenses/LICENSE-2.0
  *
  * Unless required by applicable law or agreed to in writing, software
  * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
@@ -24,7 +24,7 @@
  * the enclosing APPLY chain; renderRoot joins the branches with top-level
  * UNION ALL. A derived-table `(branch UNION ALL branch) CROSS APPLY` is not
  * used because UNION ALL inside a lateral scope mis-correlates on 19c
- * (research R4).
+ *.
  */
 
 import type { ViewDefinitionSelect } from "../../../types.js";
@@ -47,8 +47,8 @@ export interface UnionAllDeps {
  * @param walk - The recursive walk function used to visit branches.
  * @param deps - The column generator used to project the node's own columns.
  * @returns A union Fragment carrying one branch Fragment per unionAll entry.
- * @throws When the unionAll array is empty, or when a branch itself is a
- *   union (nested unionAll branches are not supported).
+ * @throws {Error} when the unionAll array is empty, or when a branch itself is a
+ * union (nested unionAll branches are not supported).
  */
 export function walkUnionAll(
   node: ViewDefinitionSelect,

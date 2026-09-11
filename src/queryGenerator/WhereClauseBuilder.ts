@@ -1,3 +1,22 @@
+/*
+ * Copyright © 2026, Commonwealth Scientific and Industrial Research
+ * Organisation (CSIRO) ABN 41 687 119 230.
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License"); you may not
+ * use this file except in compliance with the License. You may obtain a copy
+ * of the License at
+ *
+ *     https://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS, WITHOUT
+ * WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied. See the
+ * License for the specific language governing permissions and limitations
+ * under the License.
+ *
+ * @author John Grimes
+ */
+
 /**
  * Builds WHERE clauses for SQL queries.
  * @author John Grimes
@@ -20,8 +39,9 @@ export class WhereClauseBuilder {
    * @param resourceAlias - The alias the resources table is referenced by.
    * @param testId - Optional test-isolation identifier (only used in the test
    *   table, which carries a test_id column).
-   * @param whereConditions
-   * @param context
+   * @param whereConditions - Optional view-level WHERE filter conditions.
+   * @param context - The transpiler context carrying storage type and constants.
+   * @returns The WHERE clause string, or null if no conditions apply.
    */
   buildWhereClause(
     resourceType: string,
@@ -63,8 +83,9 @@ export class WhereClauseBuilder {
 
   /**
    * Generate the WHERE clause for view-level filters.
-   * @param whereConditions
-   * @param context
+   * @param whereConditions - Optional view-level WHERE filter conditions.
+   * @param context - The transpiler context carrying storage type and constants.
+   * @returns The WHERE clause string, or null if no conditions apply.
    */
   private generateViewWhereClause(
     whereConditions: ViewDefinitionWhere[] | undefined,

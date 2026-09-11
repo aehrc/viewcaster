@@ -15,7 +15,9 @@ import type {
 export class ViewDefinitionParser {
   /**
    * Parse a ViewDefinition from JSON.
-   * @param json
+   * @param json - A JSON string or object to parse as a ViewDefinition.
+   * @returns The parsed and validated ViewDefinition.
+   * @throws {Error} when the ViewDefinition structure is invalid.
    */
   static parseViewDefinition(json: string | object): ViewDefinition {
     const data: UnvalidatedViewDefinition =
@@ -32,7 +34,9 @@ export class ViewDefinitionParser {
 
   /**
    * Parse a test suite from the SQL on FHIR test format.
-   * @param json
+   * @param json - A JSON string or object representing a test suite.
+   * @returns The parsed test suite with title, resources, and tests.
+   * @throws {Error} when required test suite fields are missing.
    */
   static parseTestSuite(json: string | object): TestSuite {
     const data = (
@@ -48,7 +52,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate and narrow a ViewDefinition structure using type predicate.
-   * @param data
+   * @param data - The unvalidated ViewDefinition structure to validate.
+   * @returns True if the structure is a valid ViewDefinition; throws otherwise.
+   * @throws {TypeError} when the ViewDefinition lacks required properties.
    */
   private static isValidViewDefinition(
     data: UnvalidatedViewDefinition,
@@ -89,7 +95,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate constant names match SQL on FHIR specification.
-   * @param constants
+   * @param constants - Array of constant definitions to validate.
+   * @throws {TypeError} when a constant lacks a valid name.
    */
   private static validateConstants(constants: unknown[]): void {
     for (const constant of constants) {
@@ -114,7 +121,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate select element using type predicate.
-   * @param select
+   * @param select - The unvalidated select element to validate.
+   * @returns True if the select is valid; throws otherwise.
+   * @throws {Error} when select structure or expressions are invalid.
    */
   private static isValidSelect(
     select: UnvalidatedSelect,
@@ -131,7 +140,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate select element has required structure.
-   * @param select
+   * @param select - The select element to validate.
+   * @throws {Error} when select lacks columns, nested selects, or unionAll.
    */
   private static validateSelectStructure(select: UnvalidatedSelect): void {
     if (!select.column && !select.select && !select.unionAll) {
@@ -144,7 +154,8 @@ export class ViewDefinitionParser {
   /**
    * Validate forEach, forEachOrNull, and repeat expressions.
    * Ensures mutual exclusivity between these iteration directives.
-   * @param select
+   * @param select - The select element to validate.
+   * @throws {TypeError} when iteration expressions are malformed.
    */
   private static validateSelectExpressions(select: UnvalidatedSelect): void {
     if (select.forEach && typeof select.forEach !== "string") {
@@ -163,7 +174,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate that repeat is an array of non-empty strings.
-   * @param repeat
+   * @param repeat - The repeat array to validate.
+   * @throws {TypeError} when repeat is not an array or contains invalid paths.
    */
   private static validateRepeatExpression(repeat: unknown): void {
     if (repeat === undefined) {
@@ -183,7 +195,8 @@ export class ViewDefinitionParser {
 
   /**
    * Enforce mutual exclusivity: only one of forEach, forEachOrNull, or repeat.
-   * @param select
+   * @param select - The select element to check.
+   * @throws {Error} when multiple iteration directives are specified.
    */
   private static validateIterationDirectiveMutualExclusivity(
     select: UnvalidatedSelect,
@@ -205,7 +218,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate columns in a select element.
-   * @param select
+   * @param select - The select element containing columns to validate.
+   * @returns True if all columns are valid; false otherwise.
+   * @throws {TypeError} when a column is invalid.
    */
   private static validateSelectColumns(select: UnvalidatedSelect): boolean {
     if (select.column) {
@@ -220,7 +235,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate nested select elements.
-   * @param select
+   * @param select - The select element to check for nested selects.
+   * @returns True if all nested selects are valid; false otherwise.
+   * @throws {Error} when a nested select is invalid.
    */
   private static validateNestedSelects(select: UnvalidatedSelect): boolean {
     if (select.select) {
@@ -235,7 +252,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate unionAll branches.
-   * @param select
+   * @param select - The select element to check for unionAll branches.
+   * @returns True if all unionAll branches are valid; false otherwise.
+   * @throws {Error} when unionAll branches are invalid.
    */
   private static validateUnionAll(select: UnvalidatedSelect): boolean {
     if (select.unionAll) {
@@ -251,8 +270,10 @@ export class ViewDefinitionParser {
 
   /**
    * Validate column using type predicate.
-   * @param column
-   * @param selectContext
+   * @param column - The unvalidated column to validate.
+   * @param selectContext - The parent select element context (optional).
+   * @returns True if the column is valid; throws otherwise.
+   * @throws {TypeError} when the column lacks required properties or has invalid name.
    */
   private static isValidColumn(
     column: UnvalidatedColumn,
@@ -285,7 +306,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate column tag structure.
-   * @param column
+   * @param column - The column to validate tags for.
+   * @throws {TypeError} when a tag is malformed.
    */
   private static validateColumnTags(column: UnvalidatedColumn): void {
     if (column.tag === undefined) {
@@ -303,8 +325,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate a single tag object.
-   * @param columnName
-   * @param tag
+   * @param columnName - The name of the column the tag belongs to.
+   * @param tag - The tag object to validate.
+   * @throws {TypeError} when the tag lacks required name or value fields.
    */
   private static validateSingleTag(columnName: string, tag: unknown): void {
     if (typeof tag !== "object" || tag === null) {
@@ -334,8 +357,9 @@ export class ViewDefinitionParser {
 
   /**
    * Validate collection property constraints.
-   * @param column
-   * @param selectContext
+   * @param column - The column to validate collection constraints for.
+   * @param selectContext - The parent select element context (optional).
+   * @throws {Error} when a multi-valued path lacks collection flag or forEach context.
    */
   private static validateCollectionConstraints(
     column: UnvalidatedColumn,
@@ -372,7 +396,8 @@ export class ViewDefinitionParser {
 
   /**
    * Validate that all branches of a unionAll have the same columns in the same order.
-   * @param unionAllBranches
+   * @param unionAllBranches - Array of select elements to validate.
+   * @throws {Error} when branches have different columns or order.
    */
   private static validateUnionAllColumns(
     unionAllBranches: UnvalidatedSelect[],
@@ -419,7 +444,8 @@ export class ViewDefinitionParser {
   /**
    * Extract column definitions from a select element.
    * Handles direct columns, forEach columns, and nested select columns.
-   * @param select
+   * @param select - The select element to extract columns from.
+   * @returns Array of column definitions with name and optional type.
    */
   private static extractColumnsFromSelect(
     select: UnvalidatedSelect,

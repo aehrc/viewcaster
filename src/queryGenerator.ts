@@ -51,7 +51,7 @@ export class QueryGenerator {
    * @param viewDef - The parsed ViewDefinition.
    * @param testId - Optional test-isolation identifier (unused on Oracle).
    * @returns The SQL and column metadata.
-   * @throws When transpilation fails; the message names the offending element.
+   * @throws {Error} When transpilation fails; the message names the offending element.
    */
   generateQuery(viewDef: ViewDefinition, testId?: string): TranspilationResult {
     try {
@@ -99,7 +99,7 @@ export class QueryGenerator {
    * than one `value[x]` element is set.
    * @param constant - The constant definition.
    * @returns The constant's value.
-   * @throws Naming the constant when it has no value or multiple values.
+   * @throws {Error} Naming the constant when it has no value or multiple values.
    */
   private getConstantValue(
     constant: ViewDefinitionConstant,

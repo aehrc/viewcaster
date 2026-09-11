@@ -31,7 +31,7 @@ import { LosslessNumber, stringify as losslessStringify } from "lossless-json";
 import oracledb from "oracledb";
 
 /**
- * The storage variant of the JSON column (data-model.md).
+ * The storage variant of the JSON column.
  */
 export type StorageType = "BLOB" | "JSON";
 
@@ -69,7 +69,7 @@ export function hasOracleEnvironment(): boolean {
  *
  * `ORACLE_CONNECT_STRING` overrides the EZConnect string assembled from
  * `ORACLE_HOST` (default `localhost`), `ORACLE_PORT` (default `1521`) and
- * `ORACLE_SERVICE_NAME` (default `FREEPDB1`), per research R13.
+ * `ORACLE_SERVICE_NAME` (default `FREEPDB1`).
  * @returns The connection attributes.
  * @throws {Error} When `ORACLE_USER` or `ORACLE_PASSWORD` is missing.
  */
@@ -116,8 +116,8 @@ export function getMajorVersion(connection: oracledb.Connection): number {
 
 /**
  * Creates the resources table in the requested storage variant, with the
- * resource type index, using the DDL from data-model.md. Fails if the table
- * already exists; call {@link dropTestTable} first for a clean slate.
+ * resource type index. Fails if the table already exists; call
+ * {@link dropTestTable} first for a clean slate.
  * @param connection - An open connection.
  * @param storageType - JSON column storage variant.
  * @param tableName - Table name; defaults to {@link TEST_TABLE_NAME}.
@@ -256,7 +256,7 @@ export async function insertTestResources(
  * `DB_TYPE_JSON`.
  * @param connection - An open connection.
  * @param resource - The FHIR resource; must carry `resourceType`.
- * @param resource.resourceType
+ * @param resource.resourceType - The FHIR resource type (e.g., "Patient", "Observation").
  * @param testId - Test-isolation identifier stored with the row.
  * @param storageType - JSON column storage variant of the target table.
  * @param tableName - Table name; defaults to {@link TEST_TABLE_NAME}.

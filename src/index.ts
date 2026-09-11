@@ -56,8 +56,7 @@ export class SqlOnFhir {
    * Transpile a ViewDefinition to an Oracle SQL query.
    * @param viewDefinition - The ViewDefinition to transpile: a parsed object,
    *   a JSON string, or a FHIR resource with `resourceType:
-   *   "ViewDefinition"`. Invalid input throws naming the offending element
-   *   (FR-004); partial SQL is never returned.
+   *   "ViewDefinition"`. Invalid input throws naming the offending element; partial SQL is never returned.
    * @param testId - Optional test-isolation identifier. When given, the
    *   generated SQL filters on a `test_id` column, used by the integration
    *   harness to run concurrently against a shared table.

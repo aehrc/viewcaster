@@ -18,7 +18,7 @@
  */
 
 /**
- * Tests for ViewDefinition validation on intake (FR-004): structural
+ * Tests for ViewDefinition validation on intake: structural
  * violations, unknown constants, multi-value non-collection columns, and the
  * never-emit-partial-SQL contract. Errors must name the offending element.
  */
