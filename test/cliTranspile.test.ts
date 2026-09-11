@@ -18,7 +18,7 @@
  */
 
 /**
- * Tests for the `sof-oracle transpile` subcommand (contracts/cli.md):
+ * Tests for the `viewcaster transpile` subcommand (contracts/cli.md):
  * stdin/stdout, --input/--output, --resource-json-data-type, non-zero exit
  * naming the offending element on invalid input, and exactly one SELECT
  * written on success.
@@ -50,7 +50,7 @@ const INVALID_VIEW = JSON.stringify({
 let tempDir: string;
 
 beforeAll(() => {
-  tempDir = mkdtempSync(join(tmpdir(), "sof-oracle-cli-"));
+  tempDir = mkdtempSync(join(tmpdir(), "viewcaster-cli-"));
 });
 afterAll(() => {
   if (tempDir) rmSync(tempDir, { recursive: true, force: true });
@@ -70,7 +70,7 @@ function runCli(args: string[], stdin?: string) {
   });
 }
 
-describe("sof-oracle transpile", () => {
+describe("viewcaster transpile", () => {
   it("writes a single SELECT to stdout from stdin", () => {
     const result = runCli([], VALID_VIEW);
     expect(result.status).toBe(0);

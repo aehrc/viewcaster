@@ -1,7 +1,7 @@
 {
-  "name": "sof-oracle",
+  "name": "viewcaster",
   "version": "0.1.0",
-  "description": "A SQL on FHIR view runner that transpiles view definitions into SQL queries for Oracle Database",
+  "description": "Transpiles SQL on FHIR ViewDefinitions into Oracle SQL, and bulk loads FHIR NDJSON into Oracle Database",
   "author": "Australian e-Health Research Centre, CSIRO",
   "contributors": [
     {
@@ -13,7 +13,7 @@
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
   "bin": {
-    "sof-oracle": "./dist/cli.js"
+    "viewcaster": "./dist/cli.js"
   },
   "scripts": {
     "antlr": "node scripts/antlr.mjs",
@@ -41,11 +41,11 @@
   ],
   "repository": {
     "type": "git",
-    "url": "https://github.com/aehrc/sof-oracle.git"
+    "url": "https://github.com/aehrc/viewcaster.git"
   },
-  "homepage": "https://github.com/aehrc/sof-oracle#readme",
+  "homepage": "https://github.com/aehrc/viewcaster#readme",
   "bugs": {
-    "url": "https://github.com/aehrc/sof-oracle/issues"
+    "url": "https://github.com/aehrc/viewcaster/issues"
   },
   "files": [
     "dist/",

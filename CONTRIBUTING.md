@@ -1,4 +1,4 @@
-# Contributing to sof-oracle
+# Contributing to viewcaster
 
 Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
 (CSIRO) ABN 41 687 119 230.

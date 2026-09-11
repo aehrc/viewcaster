@@ -132,7 +132,7 @@ async function main(): Promise<void> {
   const program = new Command();
 
   program
-    .name("sof-oracle")
+    .name("viewcaster")
     .description("SQL on FHIR tooling for Oracle Database")
     .version("0.1.0");
 

@@ -161,7 +161,7 @@ describe("custom SqlOnFhirOptions", () => {
 describe("load API error contract", () => {
   let tempDir: string;
   beforeAll(() => {
-    tempDir = mkdtempSync(join(tmpdir(), "sof-oracle-api-"));
+    tempDir = mkdtempSync(join(tmpdir(), "viewcaster-api-"));
     delete process.env.ORACLE_HOST;
     delete process.env.ORACLE_PORT;
     delete process.env.ORACLE_SERVICE_NAME;

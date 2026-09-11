@@ -1,4 +1,4 @@
-# sof-oracle
+# viewcaster
 
 A TypeScript library and CLI tool for bulk loading FHIR resources into Oracle
 Database, and transpiling [SQL on FHIR](https://sql-on-fhir.org/) view
@@ -28,15 +28,15 @@ APPLY` for array unrolling
 
 ## Quick start
 
-The easiest way to use sof-oracle is via `npx`:
+The easiest way to use viewcaster is via `npx`:
 
 ```bash
 # 1. Load FHIR resources from NDJSON files into Oracle.
-npx sof-oracle load ./data --host localhost --port 1521 \
+npx viewcaster load ./data --host localhost --port 1521 \
   --service-name FREEPDB1 --user fhir --password fhir
 
 # 2. Transpile a ViewDefinition to Oracle SQL.
-npx sof-oracle transpile --input patient_demographics.ViewDefinition.json \
+npx viewcaster transpile --input patient_demographics.ViewDefinition.json \
   --output patient_demographics.sql
 
 # 3. Create a view from the generated SQL and query it (sqlplus/sqlcl).
@@ -71,7 +71,7 @@ JSON, not the surrogate `id` column.
 
 ## CLI reference
 
-### `sof-oracle transpile`
+### `viewcaster transpile`
 
 Reads a ViewDefinition (JSON) and writes one Oracle `SELECT` statement
 (suitable for `CREATE VIEW ... AS` or `INSERT INTO ... SELECT`).
@@ -89,7 +89,7 @@ Reads a ViewDefinition (JSON) and writes one Oracle `SELECT` statement
 Invalid ViewDefinitions exit non-zero, name the offending element on stderr,
 and write nothing.
 
-### `sof-oracle load <directory>`
+### `viewcaster load <directory>`
 
 Bulk loads `{ResourceType}.ndjson` files into the resources table.
 
@@ -113,7 +113,7 @@ non-zero if any file failed, even with `--continue-on-error`.
 ## Programmatic API
 
 ```typescript
-import { SqlOnFhir, loadNdjsonFiles } from "sof-oracle";
+import { SqlOnFhir, loadNdjsonFiles } from "viewcaster";
 
 // Transpile.
 const result = new SqlOnFhir({ resourceJsonDataType: "BLOB" }).transpile({

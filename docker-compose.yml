@@ -11,7 +11,7 @@
 services:
   oracle:
     image: container-registry.oracle.com/database/free:latest
-    container_name: sof-oracle-db
+    container_name: viewcaster-db
     ports:
       - "${ORACLE_LOCAL_PORT:-1521}:1521"
     environment:

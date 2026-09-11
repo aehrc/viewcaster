@@ -15,7 +15,7 @@
 --
 -- Author: John Grimes
 --
--- Creates the sof-oracle application user in the FREEPDB1 pluggable database.
+-- Creates the viewcaster application user in the FREEPDB1 pluggable database.
 -- Executed once by the Oracle container image after the database is created
 -- (mounted at /opt/oracle/scripts/setup).
 
