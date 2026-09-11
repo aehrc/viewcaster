@@ -122,10 +122,15 @@ export class Transpiler {
       (_match, source: string, path: string) =>
         `JSON_VALUE(${source}${formatSuffix}, '${path}' RETURNING VARCHAR2(4000))`,
     );
+    // The wrapper form is used where a scalar's original text is needed; it
+    // takes an explicit return type, which Oracle requires before the
+    // wrapper clause.
     const withJsonQuery = decorated.replaceAll(
-      /JSON_QUERY\(([^(),]+),\s*'([^']+)'\)/g,
-      (_match, source: string, path: string) =>
-        `JSON_QUERY(${source}${formatSuffix}, '${path}')`,
+      /JSON_QUERY\(([^(),]+),\s*'([^']+)'(\s+WITH WRAPPER)?\)/g,
+      (_match, source: string, path: string, wrapper: string | undefined) =>
+        wrapper
+          ? `JSON_QUERY(${source}${formatSuffix}, '${path}' RETURNING VARCHAR2(4000)${wrapper})`
+          : `JSON_QUERY(${source}${formatSuffix}, '${path}')`,
     );
     return withJsonQuery.replaceAll(
       /JSON_EXISTS\(([^(),]+),\s*'([^']+)'\)/g,

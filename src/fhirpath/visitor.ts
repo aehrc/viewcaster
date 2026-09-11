@@ -2123,7 +2123,9 @@ export class FHIRPathToOracleVisitor
     }
 
     const isLow = functionName === "lowBoundary";
-    const value = this.context.iterationContext ?? this.rootJson;
+    const value = this.rawJsonLexeme(
+      this.context.iterationContext ?? this.rootJson,
+    );
     const resolved = this.context.boundaryType;
 
     // Datatype known from an explicit ofType directly on the boundary input.
@@ -2151,6 +2153,32 @@ export class FHIRPathToOracleVisitor
 
     // No explicit ofType: classify the value by its lexical form at runtime.
     return this.lexicalBoundarySql(value, isLow);
+  }
+
+  /**
+   * Rewrites a JSON_VALUE extraction into one that preserves the value's
+   * original lexical form.
+   *
+   * A boundary is defined by the precision of the input as written, so the
+   * trailing zeros matter: `1.0` has boundaries 0.95 and 1.05, while `1` has
+   * 0.5 and 1.5. Oracle normalises a JSON number before JSON_VALUE returns
+   * it, so `1.0` arrives as `1` and the precision is gone. JSON_QUERY returns
+   * the source text instead. It needs `WITH WRAPPER` because the target is a
+   * scalar rather than an object or array, which yields `[1.0]`, so the
+   * brackets are removed; a JSON string also arrives quoted, as
+   * `["2010-10-10"]`, so the quotes are removed as well. An absent element
+   * gives NULL, which propagates through every boundary branch.
+   *
+   * Anything that is not a plain JSON_VALUE call (a literal, or an expression
+   * already computed by an enclosing construct) is returned unchanged.
+   * @param value - The SQL expression holding the source value.
+   * @returns An equivalent expression yielding the value's original lexeme.
+   */
+  private rawJsonLexeme(value: string): string {
+    const call = /^JSON_VALUE\(([^(),]+),\s*'([^']+)'\)$/.exec(value);
+    if (!call) return value;
+    const wrapped = `JSON_QUERY(${call[1]}, '${call[2]}' WITH WRAPPER)`;
+    return `TRIM(BOTH '"' FROM SUBSTR(${wrapped}, 2, LENGTH(${wrapped}) - 2))`;
   }
 
   /**
