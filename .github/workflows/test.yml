@@ -13,7 +13,7 @@ env:
 
 jobs:
   # Oracle Database 19c Enterprise Edition. The image is a private, self-built
-  # package (OTN Developer Licence; see research R15), pulled with the
+  # package (Oracle Technology Network Developer Licence), pulled with the
   # workflow's GITHUB_TOKEN. Fork pull requests cannot read the package, so the
   # job is skipped for them.
   test-19c:

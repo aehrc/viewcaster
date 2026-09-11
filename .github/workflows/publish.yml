@@ -144,15 +144,29 @@ jobs:
         with:
           bun-version: latest
 
+      # Trusted publishing over OIDC needs npm >= 11.5.1 on Node >= 22.14.0,
+      # which is newer than the runner default. `registry-url` is deliberately
+      # omitted: it writes an `_authToken` line that makes npm attempt classic
+      # auth and fail with ENEEDAUTH instead of falling back to OIDC.
+      - name: Setup Node
+        uses: actions/setup-node@v4
+        with:
+          node-version: "22"
+
+      - name: Upgrade npm
+        run: npm install -g npm@latest
+
       - name: Install dependencies
         run: bun install --frozen-lockfile
 
       - name: Build project
         run: bun run build
 
+      # Authenticates via OIDC against the npm trusted publisher configured for
+      # this repository and workflow file; no token is required, and provenance
+      # is attached automatically. NODE_AUTH_TOKEN must stay unset.
       - name: Publish to npm
         run: npm publish
-        continue-on-error: true
 
   publish-report:
     name: Publish test report to GitHub Pages
