@@ -1,11 +1,12 @@
 # viewcaster
 
+[![Build and test](https://github.com/aehrc/viewcaster/actions/workflows/test.yml/badge.svg)](https://github.com/aehrc/viewcaster/actions/workflows/test.yml)
+[![npm](https://img.shields.io/npm/v/viewcaster)](https://www.npmjs.com/package/viewcaster)
+[![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
+
 A TypeScript library and CLI tool for bulk loading FHIR resources into Oracle
 Database, and transpiling [SQL on FHIR](https://sql-on-fhir.org/) view
 definitions into Oracle SQL queries.
-
-Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
-(CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.
 
 ## Features
 
@@ -230,7 +231,13 @@ SQLONFHIR_TEST_PATH=./sqlonfhir/tests bun run test   # official suite (needs ORA
 ```
 
 See `CONTRIBUTING.md` for the full development workflow, including CI.
+Security issues should be reported as described in `SECURITY.md`, not through
+public issues.
 
 ## Licence
 
-Apache License 2.0. See `LICENSE`.
+Apache License 2.0. See `LICENSE`. Third party content bundled with or derived
+from this project, including the HL7 FHIRPath grammar, is listed in `NOTICE`.
+
+Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+(CSIRO) ABN 41 687 119 230. Licensed under the Apache License, Version 2.0.

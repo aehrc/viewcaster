@@ -1,3 +1,14 @@
+// FHIRPath ANTLR 4 grammar, taken from the FHIRPath Normative Release (N1)
+// published by HL7 International (https://hl7.org/fhirpath/N1/fhirpath.g4).
+//
+// Modified locally: an `entireExpression` root rule anchoring a parse to EOF,
+// and a `LONGNUMBER` token with its `longNumberLiteral` alternative for FHIR
+// `integer64` values.
+//
+// The FHIRPath specification is dedicated to the public domain under Creative
+// Commons "No Rights Reserved" (CC0 1.0); see https://hl7.org/fhir/license.html.
+// "FHIR" and "HL7" are trademarks of Health Level Seven International.
+
 grammar fhirpath;
 
 // Grammar rules

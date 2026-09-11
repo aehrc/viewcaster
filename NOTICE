@@ -1,0 +1,38 @@
+viewcaster
+Copyright © 2026, Commonwealth Scientific and Industrial Research Organisation
+(CSIRO) ABN 41 687 119 230.
+
+This product includes software developed at the Australian e-Health Research
+Centre, CSIRO (https://aehrc.csiro.au/).
+
+Licensed under the Apache License, Version 2.0 (the "License"); you may not use
+this file except in compliance with the License. You may obtain a copy of the
+License at https://www.apache.org/licenses/LICENSE-2.0.
+
+--------------------------------------------------------------------------------
+Third party content
+--------------------------------------------------------------------------------
+
+FHIRPath ANTLR grammar
+  Files: grammar/fhirpath.g4, and the ANTLR output derived from it in
+         src/generated/grammar/
+  Source: FHIRPath Normative Release (N1), HL7 International
+          (https://hl7.org/fhirpath/N1/fhirpath.g4)
+  Licence: Creative Commons "No Rights Reserved" (CC0 1.0)
+           (https://hl7.org/fhir/license.html)
+  Modifications: an `entireExpression` root rule anchoring a parse to EOF, and
+           a `LONGNUMBER` token with its `longNumberLiteral` alternative for
+           FHIR `integer64` values. CC0 places no restriction on modification
+           or redistribution.
+  Note: "FHIR" and "HL7" are trademarks of Health Level Seven International.
+        Use of the grammar does not imply HL7 endorsement of this software.
+
+SQL on FHIR test suite
+  Files: sqlonfhir/ (git submodule, not redistributed in published artefacts)
+  Source: https://github.com/FHIR/sql-on-fhir.js
+  Licence: Apache License 2.0
+
+Runtime dependencies (installed from npm, not vendored in this repository):
+  antlr4ts      BSD-3-Clause
+  commander     MIT
+  oracledb      Apache-2.0 OR UPL-1.0
