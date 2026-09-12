@@ -33,7 +33,7 @@ import type { Context, Fragment, ProjectedColumn } from "../types.js";
  * Projects an array of ViewDefinition column descriptors into SQL expressions.
  *
  * Delegates expression generation to `ColumnExpressionGenerator`, which
- * translates each column's FHIRPath expression into a T-SQL expression
+ * translates each column's FHIRPath expression into an Oracle SQL expression
  * relative to the current transpiler context (iteration source, aliases, etc.).
  * @param columns - The column descriptors from the ViewDefinition select node.
  * @param ctx - The current walker context supplying the transpiler context
@@ -64,7 +64,7 @@ export function projectColumns(
  * @param ctx - The current walker context supplying partition keys and the
  *   transpiler context for expression generation.
  * @param columnGenerator - The generator that converts column descriptors into
- *   T-SQL expressions.
+ *   Oracle SQL expressions.
  * @returns A Fragment carrying only projected columns; `ctes` and
  *   `fromExtensions` are always empty.
  */

@@ -265,7 +265,7 @@ export interface TestSuite {
 }
 
 /**
- * Transpilation result containing the generated T-SQL query.
+ * Transpilation result containing the generated Oracle SQL query.
  */
 export interface TranspilationResult {
   sql: string;

@@ -18,7 +18,7 @@
  */
 
 /**
- * Query generator components for building T-SQL from ViewDefinitions.
+ * Query generator components for building Oracle SQL from ViewDefinitions.
  */
 
 export { PathParser } from "./PathParser.js";
