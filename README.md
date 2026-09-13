@@ -136,8 +136,12 @@ existing output files), `--verbose` / `--progress` / `--quiet`.
 
 Each resource type is streamed with one query ordered by the surrogate `id`
 column, and written with back-pressure applied, so memory use does not grow
-with the size of the table. Exporting a 31 MB, 100,000 row table peaked at
-120 MiB RSS and reproduced the input byte for byte.
+with the size of the table. Measured on the built CLI under Node.js 24,
+exporting 10,000 rows (3 MB) peaked at 95 MiB RSS, 100,000 rows (30 MB) at
+95 MiB, and 400,000 rows (135 MB) at 104 MiB; a process that connects and
+exports nothing already costs 83 MiB, so forty times the data adds about
+8 MiB. The 400,000 row export also completes, byte for byte identical, with
+V8 capped at `--max-old-space-size=64`.
 
 **Fidelity.** A `BLOB` column holds the bytes the loader wrote, and those
 bytes are written out unchanged, so a `BLOB` export is byte for byte identical
