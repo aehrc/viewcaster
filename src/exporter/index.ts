@@ -30,6 +30,7 @@ import path from "node:path";
 import oracledb from "oracledb";
 
 import {
+  assertDistinctOutputFileNames,
   assertNoExistingOutputFiles,
   assertSafeResourceTypeNames,
   ensureOutputDirectory,
@@ -282,6 +283,7 @@ async function planExport(
   }
 
   assertSafeResourceTypeNames(resourceTypes);
+  assertDistinctOutputFileNames(resourceTypes);
   assertNoExistingOutputFiles(
     options.directory,
     resourceTypes,

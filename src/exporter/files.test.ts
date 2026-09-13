@@ -36,6 +36,7 @@ import { join } from "node:path";
 import { afterEach, beforeEach, describe, expect, it } from "vitest";
 
 import {
+  assertDistinctOutputFileNames,
   assertNoExistingOutputFiles,
   assertSafeResourceTypeNames,
   ensureOutputDirectory,
@@ -91,6 +92,29 @@ describe("assertSafeResourceTypeNames", () => {
     expect(() =>
       assertSafeResourceTypeNames(["Patient", "../escape", "patient"]),
     ).toThrow(/'\.\.\/escape'.*'patient'/s);
+  });
+});
+
+describe("assertDistinctOutputFileNames", () => {
+  it("accepts resource types that map to distinct file names", () => {
+    expect(() =>
+      assertDistinctOutputFileNames(["Patient", "Observation", "List"]),
+    ).not.toThrow();
+  });
+
+  it("rejects resource types that differ only in case", () => {
+    // Patient.ndjson and PATIENT.ndjson are the same path on a
+    // case-insensitive filesystem, so the second file written would silently
+    // replace the first.
+    expect(() =>
+      assertDistinctOutputFileNames(["PATIENT", "Patient", "Observation"]),
+    ).toThrow(/'PATIENT'.*'Patient'/s);
+  });
+
+  it("names every colliding group", () => {
+    expect(() =>
+      assertDistinctOutputFileNames(["Patient", "PATIENT", "List", "LIST"]),
+    ).toThrow(/LIST/);
   });
 });
 

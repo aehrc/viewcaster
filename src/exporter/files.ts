@@ -74,6 +74,44 @@ export function assertSafeResourceTypeNames(resourceTypes: string[]): void {
 }
 
 /**
+ * Reject resource types whose output files would collide.
+ *
+ * Oracle's `resource_type` column is case sensitive, so `Patient` and
+ * `PATIENT` are two resource types, but on a case-insensitive filesystem
+ * (macOS, Windows) `Patient.ndjson` and `PATIENT.ndjson` are one file: the
+ * second export would silently replace the first, reporting both as written.
+ * The collision is rejected before any file is opened rather than resolved,
+ * because either name could be the correct one.
+ * @param resourceTypes - Resource type values read from the table.
+ * @throws {Error} naming each colliding group of resource types.
+ * @example
+ * assertDistinctOutputFileNames(["Patient", "PATIENT"]); // throws
+ */
+export function assertDistinctOutputFileNames(resourceTypes: string[]): void {
+  const byFileName = new Map<string, string[]>();
+  for (const resourceType of resourceTypes) {
+    const key = exportFileName(resourceType).toLowerCase();
+    const collisions = byFileName.get(key) ?? [];
+    collisions.push(resourceType);
+    byFileName.set(key, collisions);
+  }
+
+  const collided = [...byFileName.values()].filter(
+    (resourceTypesForFile) => resourceTypesForFile.length > 1,
+  );
+  if (collided.length > 0) {
+    const described = collided
+      .map((group) => group.map((name) => `'${name}'`).join(" and "))
+      .join(", ");
+    throw new Error(
+      `Cannot export resource types whose file names differ only in case, ` +
+        `because they are one file on a case-insensitive filesystem: ` +
+        `${described}. Correct these values in the table before exporting.`,
+    );
+  }
+}
+
+/**
  * Create the output directory, including any missing parents.
  * @param directory - Output directory.
  * @throws {Error} if the directory cannot be created, including when the path

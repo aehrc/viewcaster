@@ -147,15 +147,18 @@ through `JSON_SERIALIZE(json RETURNING BLOB)`: the result is an equivalent
 document, but not byte identical, because Oracle normalises a document as it
 encodes it (`{"v":1.0}` is stored, and comes back, as `{"v":1}`).
 
-**Safeguards.** Two checks run before any file is opened, so a failure leaves
-the output directory untouched: the export fails if one of the output files
-already exists (pass `--overwrite`), and it fails if a `resource_type` value
+**Safeguards.** Three checks run before any file is opened, so a failure
+leaves the output directory untouched. The export fails if one of the output
+files already exists (pass `--overwrite`). It fails if a `resource_type` value
 in the table is not a valid FHIR resource type name - an upper-case letter
 followed by letters and digits, which is what `load` recognises in a file
-name. One condition can only be detected while rows are streaming: a stored
-resource that spans multiple lines cannot be represented in NDJSON, so the
-export stops with an error naming the row. The file being written is removed,
-but files already completed for earlier resource types remain.
+name. It also fails if two `resource_type` values differ only in case
+(`Patient` and `PATIENT`): Oracle treats them as two resource types, but they
+are one file on a case-insensitive filesystem, so one would silently replace
+the other. One condition can only be detected while rows are streaming: a
+stored resource that spans multiple lines cannot be represented in NDJSON, so
+the export stops with an error naming the row. The file being written is
+removed, but files already completed for earlier resource types remain.
 
 ## Programmatic API
 

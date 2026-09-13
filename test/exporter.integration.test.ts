@@ -308,6 +308,26 @@ describe.skipIf(!oracleAvailable)("pre-flight guards", () => {
     expect(readdirSync(outputDir)).toEqual([]);
   });
 
+  it("refuses to write resource types that differ only in case", async () => {
+    const { tableName } = await loadFixture({
+      "Patient.ndjson": PATIENT_LINES,
+    });
+    // Oracle's resource_type column is case sensitive, but Patient.ndjson and
+    // PATIENT.ndjson are one file on a case-insensitive filesystem, so
+    // exporting both would silently drop one resource type.
+    await harness.insertRawResource(
+      tableName,
+      "PATIENT",
+      Buffer.from('{"resourceType":"Patient","id":"shouty"}', "utf8"),
+    );
+    const outputDir = harness.makeTempDir();
+
+    await expect(runExport(outputDir, tableName)).rejects.toThrow(
+      /differ only in case/,
+    );
+    expect(readdirSync(outputDir)).toEqual([]);
+  });
+
   it("reports that there is nothing to export for an absent resource type", async () => {
     const { tableName } = await loadFixture({
       "Patient.ndjson": PATIENT_LINES,
