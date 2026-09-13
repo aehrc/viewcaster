@@ -21,13 +21,15 @@
 
 /**
  * CLI for SQL on FHIR tooling.
- * Supports transpiling ViewDefinitions to Oracle SQL.
+ * Supports transpiling ViewDefinitions to Oracle SQL, and loading and
+ * exporting FHIR resources as NDJSON.
  * @author John Grimes
  */
 
 import { Command } from "commander";
 import { readFileSync, writeFileSync } from "node:fs";
 
+import { createExportCommand } from "./export.js";
 import { SqlOnFhir } from "./index.js";
 import { createLoadCommand } from "./load.js";
 import { normaliseResourceJsonDataType } from "./validation.js";
@@ -158,6 +160,8 @@ async function main(): Promise<void> {
   // Add subcommands.
   program.addCommand(createTranspileCommand());
   program.addCommand(createLoadCommand());
+  program.addCommand(createExportCommand());
+
   // Parse arguments.
   await program.parseAsync(process.argv);
 

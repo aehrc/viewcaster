@@ -200,7 +200,7 @@ export function printSummary(result: LoadResult, durationMs: number): void {
  * @param ms - Duration in milliseconds.
  * @returns Formatted duration string.
  */
-function formatDuration(ms: number): string {
+export function formatDuration(ms: number): string {
   const seconds = Math.floor(ms / 1000);
   const minutes = Math.floor(seconds / 60);
   const hours = Math.floor(minutes / 60);
@@ -222,7 +222,7 @@ function formatDuration(ms: number): string {
  * @param ms - Duration in milliseconds.
  * @returns Formatted throughput string.
  */
-function formatThroughput(rows: number, ms: number): string {
+export function formatThroughput(rows: number, ms: number): string {
   if (ms === 0) return "0";
   const rowsPerSec = (rows / ms) * 1000;
   return rowsPerSec.toLocaleString(undefined, { maximumFractionDigits: 0 });

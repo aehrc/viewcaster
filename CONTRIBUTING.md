@@ -47,6 +47,17 @@ The integration tests execute generated SQL against a live Oracle instance and
 skip cleanly when no `ORACLE_*` environment is set. They use dedicated test
 tables and never touch an existing `fhir_resources` table.
 
+The loader and the exporter share the harness in `test/loaderHarness.ts`,
+which owns the connection pool, creates uniquely named tables, and removes
+those tables and any temporary directories afterwards. Cases that need the
+native `JSON` column type are gated on `harness.getMajorVersion() >= 21`, so
+the same files run on every supported version.
+
+`test/exporterCli.integration.test.ts` runs the `export` command as a child
+process (`bunx tsx src/cli.ts export ...`), which covers the commander wiring
+and the process exit codes. It needs the dev dependencies installed, not just
+a built `dist/`.
+
 The official SQL on FHIR compliance suite is vendored as the `sqlonfhir/`
 git submodule. Run it with:
 

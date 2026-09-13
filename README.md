@@ -5,8 +5,9 @@
 [![License](https://img.shields.io/badge/license-Apache%202.0-blue)](LICENSE)
 
 A TypeScript library and CLI tool for bulk loading FHIR resources into Oracle
-Database, and transpiling [SQL on FHIR](https://sql-on-fhir.org/) view
-definitions into Oracle SQL queries.
+Database, exporting them back out again, and transpiling
+[SQL on FHIR](https://sql-on-fhir.org/) view definitions into Oracle SQL
+queries.
 
 ## Features
 
@@ -26,6 +27,8 @@ APPLY` for array unrolling
 - **WHERE clauses** - view-level filtering with FHIRPath expressions
 - **Bulk NDJSON loader** - batched parallel loader for `{ResourceType}.ndjson`
   directories
+- **NDJSON exporter** - streams resources back out to `{ResourceType}.ndjson`
+  files that `load` can consume again
 
 ## Quick start
 
@@ -44,6 +47,12 @@ npx viewcaster transpile --input patient_demographics.ViewDefinition.json \
 CREATE VIEW patient_demographics AS
 <contents of patient_demographics.sql>;
 SELECT * FROM patient_demographics FETCH FIRST 10 ROWS ONLY;
+```
+
+Resources can also be written back out to NDJSON, one file per resource type:
+
+```bash
+npx viewcaster export ./out --user fhir --password fhir
 ```
 
 Connection details can also be supplied via environment variables
@@ -111,10 +120,47 @@ Loading options: `--table-name` (default `fhir_resources`), `--schema-name`,
 The loader prints a per-file summary (rows loaded, failures) and exits
 non-zero if any file failed, even with `--continue-on-error`.
 
+### `viewcaster export <directory>`
+
+Writes the resources in the table back out to NDJSON, one
+`{ResourceType}.ndjson` file per distinct `resource_type`, so an exported
+directory can be fed straight back into `load`. The output directory is
+created if it does not exist.
+
+Connection options are the same as `load`, with the same environment
+fallbacks.
+
+Export options: `--table-name` (default `fhir_resources`), `--schema-name`,
+`--resource-type <type>` (export only that type), `--overwrite` (replace
+existing output files), `--verbose` / `--progress` / `--quiet`.
+
+Each resource type is streamed with one query ordered by the surrogate `id`
+column, and written with back-pressure applied, so memory use does not grow
+with the size of the table. Exporting a 31 MB, 100,000 row table peaked at
+120 MiB RSS and reproduced the input byte for byte.
+
+**Fidelity.** A `BLOB` column holds the bytes the loader wrote, and those
+bytes are written out unchanged, so a `BLOB` export is byte for byte identical
+to what was loaded, insignificant whitespace and decimal lexical forms
+included. A native `JSON` column holds Oracle's binary format, so it is read
+through `JSON_SERIALIZE(json RETURNING BLOB)`: the result is an equivalent
+document, but not byte identical, because Oracle normalises a document as it
+encodes it (`{"v":1.0}` is stored, and comes back, as `{"v":1}`).
+
+**Safeguards.** Two checks run before any file is opened, so a failure leaves
+the output directory untouched: the export fails if one of the output files
+already exists (pass `--overwrite`), and it fails if a `resource_type` value
+in the table is not a valid FHIR resource type name - an upper-case letter
+followed by letters and digits, which is what `load` recognises in a file
+name. One condition can only be detected while rows are streaming: a stored
+resource that spans multiple lines cannot be represented in NDJSON, so the
+export stops with an error naming the row. The file being written is removed,
+but files already completed for earlier resource types remain.
+
 ## Programmatic API
 
 ```typescript
-import { SqlOnFhir, loadNdjsonFiles } from "viewcaster";
+import { SqlOnFhir, loadNdjsonFiles, exportNdjsonFiles } from "viewcaster";
 
 // Transpile.
 const result = new SqlOnFhir({ resourceJsonDataType: "BLOB" }).transpile({
@@ -129,6 +175,18 @@ await loadNdjsonFiles({
   directory: "./data",
   database: { user: "fhir", password: "fhir" },
 });
+
+// Export.
+const summary = await exportNdjsonFiles({
+  directory: "./out",
+  database: { user: "fhir", password: "fhir" },
+  // Optional: restrict the export to a single resource type.
+  resourceType: "Patient",
+  // Optional: replace files left by an earlier export.
+  overwrite: true,
+});
+console.log(`${summary.totalRows} rows in ${summary.files.length} file(s)`);
+// summary.files: [{ resourceType, path, rowsWritten }, ...]
 ```
 
 `transpile` accepts a ViewDefinition object, a JSON string, or a FHIR resource

@@ -19,8 +19,8 @@
 
 /**
  * SQL on FHIR runner for Oracle Database.
- * Main API for transpiling ViewDefinitions to Oracle SQL queries and bulk
- * loading FHIR NDJSON resources.
+ * Main API for transpiling ViewDefinitions to Oracle SQL queries, and for bulk
+ * loading and exporting FHIR NDJSON resources.
  * @author John Grimes
  */
 
@@ -45,6 +45,12 @@ export type {
   LoadOptions,
   LoadResult,
 } from "./loader/types.js";
+export { exportNdjsonFiles } from "./exporter/index.js";
+export type {
+  ExportOptions,
+  ExportResult,
+  ExportedFile,
+} from "./exporter/types.js";
 
 import { ViewDefinitionParser } from "./parser.js";
 import { QueryGenerator, QueryGeneratorOptions } from "./queryGenerator";
