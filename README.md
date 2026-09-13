@@ -11,7 +11,7 @@ definitions into Oracle SQL queries.
 ## Features
 
 - **SQL on FHIR v2 compliance** - passes the official SQL on FHIR test suite
-  against Oracle Database 19c, 21c and 23ai
+  against Oracle Database 19c, 21c, 23ai and 26ai
 - **FHIRPath support** - the FHIRPath subset exercised by the official test
   suite: literals, path navigation, indexers, `where`, `exists`, `empty`,
   `extension`, `ofType`, `first`, `join`, arithmetic, boolean logic,
@@ -232,7 +232,7 @@ bun install
 bunx tsc --noEmit       # type check
 bun run lint            # ESLint
 bun run test:coverage   # unit tests with coverage
-docker compose up -d    # local Oracle 23ai Free for integration tests
+docker compose up -d    # local Oracle AI Database 26ai Free for integration tests
 SQLONFHIR_TEST_PATH=./sqlonfhir/tests bun run test   # official suite (needs ORACLE_* env)
 ```
 

@@ -19,9 +19,9 @@ bun run lint
 
 ### Local test database
 
-The `docker-compose.yml` in the repository root runs Oracle 23ai Free
-(ARM64-native on Apple Silicon), which covers the default `BLOB` storage and
-the native `JSON` storage types:
+The `docker-compose.yml` in the repository root runs Oracle AI Database 26ai
+Free (ARM64-native on Apple Silicon), which covers the default `BLOB` storage
+and the native `JSON` storage types:
 
 ```bash
 docker compose up -d
@@ -73,7 +73,7 @@ vitest plugins).
 ### CI
 
 `.github/workflows/test.yml` runs the full matrix on every push: Oracle 19c EE
-(BLOB), 21c XE (BLOB and JSON) and 23ai Free (BLOB and JSON). The 19c job
+(BLOB), 21c XE, 23ai Free and 26ai Free (each in BLOB and JSON). The 19c job
 pulls the private `ghcr.io/aehrc/oracle-database-ee:19.3.0` package using the
 workflow `GITHUB_TOKEN`; it is skipped on fork pull requests, which cannot
 read the package.

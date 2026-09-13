@@ -89,7 +89,7 @@ jobs:
 
           # The most recent supported Oracle version, in its default storage
           # configuration, provides the headline report.
-          cp test-reports/test-report-23ai-blob/test-report.json "${REPORT_DIR}/test_report.json"
+          cp test-reports/test-report-26ai-blob/test-report.json "${REPORT_DIR}/test_report.json"
 
           # Also copy individual reports for each Oracle version.
           for version_dir in test-reports/test-report-*/; do

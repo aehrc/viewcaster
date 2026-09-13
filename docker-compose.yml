@@ -15,7 +15,10 @@
 #
 # @author John Grimes
 
-# Local Oracle Database 23ai Free for development and native JSON testing.
+# Local Oracle AI Database 26ai Free for development and native JSON testing.
+# The tag is pinned so that a database upgrade is a deliberate change: the
+# named volume below holds datafiles created by the version that first started
+# it, and a newer image will not open them without an upgrade.
 #
 # Usage:
 #   docker compose up -d oracle
@@ -27,7 +30,7 @@
 # docker/init/01_create_user.sql.
 services:
   oracle:
-    image: container-registry.oracle.com/database/free:latest
+    image: container-registry.oracle.com/database/free:23.26.3.0
     container_name: viewcaster-db
     ports:
       - "${ORACLE_LOCAL_PORT:-1521}:1521"

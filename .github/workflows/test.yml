@@ -96,9 +96,12 @@ jobs:
           path: out/test-report.json
           retention-days: 30
 
-  # Oracle Database 21c Express Edition and 23ai Free, pulled anonymously from
-  # the Oracle Container Registry under their free-use licences. Both support
-  # the native JSON type, so each version runs against both storage variants.
+  # Oracle Database 21c Express Edition, 23ai Free and 26ai Free, pulled
+  # anonymously from the Oracle Container Registry under their free-use
+  # licences. All support the native JSON type, so each version runs against
+  # both storage variants. The image tags are pinned: `free:latest` now
+  # resolves to 26ai (23.26.3.0), so an unpinned 23ai row would silently stop
+  # testing 23ai.
   test-free:
     name: Oracle ${{ matrix.label }} (${{ matrix.resource-json-data-type }})
     runs-on: ubuntu-latest
@@ -117,15 +120,25 @@ jobs:
             resource-json-data-type: JSON
             report-suffix: 21c-json
           - label: 23ai Free
-            image: container-registry.oracle.com/database/free:latest
+            image: container-registry.oracle.com/database/free:23.9.0.0
             service-name: FREEPDB1
             resource-json-data-type: BLOB
             report-suffix: 23ai-blob
           - label: 23ai Free
-            image: container-registry.oracle.com/database/free:latest
+            image: container-registry.oracle.com/database/free:23.9.0.0
             service-name: FREEPDB1
             resource-json-data-type: JSON
             report-suffix: 23ai-json
+          - label: 26ai Free
+            image: container-registry.oracle.com/database/free:23.26.3.0
+            service-name: FREEPDB1
+            resource-json-data-type: BLOB
+            report-suffix: 26ai-blob
+          - label: 26ai Free
+            image: container-registry.oracle.com/database/free:23.26.3.0
+            service-name: FREEPDB1
+            resource-json-data-type: JSON
+            report-suffix: 26ai-json
     env:
       ORACLE_SERVICE_NAME: ${{ matrix.service-name }}
       ORACLE_RESOURCE_JSON_DATA_TYPE: ${{ matrix.resource-json-data-type }}

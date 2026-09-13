@@ -31,7 +31,7 @@ runs:
         df -h / /mnt
 
         # A GitHub-hosted runner has roughly 14 GB free on the root filesystem,
-        # which is less than the Oracle 23ai Free image needs (about 13 GB),
+        # which is less than the Oracle Free images need (about 13 GB),
         # and too little for the 21c XE container to write its redo logs. /mnt
         # is a separate disk with far more room, so Docker is pointed at it
         # before any image is pulled. The preloaded images are discarded rather
