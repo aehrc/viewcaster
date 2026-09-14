@@ -11,7 +11,7 @@ queries.
 
 ## Features
 
-- **SQL on FHIR v2 compliance** - passes the official SQL on FHIR test suite
+- **SQL on FHIR compliance** - passes the official SQL on FHIR test suite
   against Oracle Database 19c, 21c, 23ai and 26ai
 - **FHIRPath support** - the FHIRPath subset exercised by the official test
   suite: literals, path navigation, indexers, `where`, `exists`, `empty`,
