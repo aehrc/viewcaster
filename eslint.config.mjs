@@ -231,7 +231,7 @@ export default tseslint.config(
 
   // CLI entry points legitimately call process.exit for exit codes.
   {
-    files: ["src/cli.ts", "src/load.ts"],
+    files: ["src/cli.ts", "src/load.ts", "src/export.ts"],
     rules: {
       "unicorn/no-process-exit": "off",
     },

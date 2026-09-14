@@ -20,6 +20,7 @@
     "build": "tsc -p tsconfig.build.json",
     "cli": "tsx src/cli.ts",
     "cli:load": "tsx src/cli.ts load",
+    "cli:export": "tsx src/cli.ts export",
     "cli:transpile": "tsx src/cli.ts transpile",
     "test": "vitest run",
     "test:coverage": "vitest run --coverage",

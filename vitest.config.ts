@@ -34,15 +34,16 @@ export default defineConfig({
         "src/**/*.d.ts",
         "src/**/*.test.ts",
         "src/generated/**",
-        // The loader's execution paths are exercised by the live-database
-        // integration suites, which are skipped (and excluded from the
-        // threshold gate) when no ORACLE_* environment is configured.
+        // The loader's and exporter's execution paths are exercised by the
+        // live-database integration suites, which are skipped (and excluded
+        // from the threshold gate) when no ORACLE_* environment is configured.
         "src/loader/**",
+        "src/exporter/**",
       ],
       reportOnFailure: true,
       // The no-database run covers the transpiler surface; the live-database
-      // suites (loader paths, deep repeat/extension composition) run in the
-      // CI matrix against 19c/21c/23ai and gate there.
+      // suites (loader and exporter paths, deep repeat/extension composition)
+      // run in the CI matrix against 19c/21c/23ai and gate there.
       thresholds: {
         lines: 50,
         functions: 45,

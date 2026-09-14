@@ -79,6 +79,20 @@ export interface LoaderIntegrationHarness {
   makeTableName(): string;
   /** The open pool, for direct assertions. */
   pool(): oracledb.Pool;
+  /** The connection configuration the harness connected with. */
+  databaseConfig(): DatabaseOptions;
+  /** Create and register an empty temporary directory. */
+  makeTempDir(): string;
+  /**
+   * Insert a row directly, bypassing the loader. Used to stage table contents
+   * the loader cannot produce, such as an invalid `resource_type` value or a
+   * resource stored across multiple lines.
+   */
+  insertRawResource(
+    tableName: string,
+    resourceType: string,
+    json: Buffer,
+  ): Promise<void>;
   /**
    * Write an NDJSON fixture directory. Keys are file names, values are arrays
    * of JSON lines.
@@ -176,6 +190,29 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
       writeFileSync(join(dir, name), lines.join("\n") + "\n", "utf8");
     }
     return dir;
+  }
+
+  function makeTempDir(): string {
+    const dir = mkdtempSync(join(tmpdir(), "sof-export-it-"));
+    createdDirs.push(dir);
+    return dir;
+  }
+
+  async function insertRawResource(
+    tableName: string,
+    resourceType: string,
+    json: Buffer,
+  ): Promise<void> {
+    const connection = await requirePool().getConnection();
+    try {
+      await connection.execute(
+        `INSERT INTO ${tableName} (resource_type, json) VALUES (:1, :2)`,
+        [resourceType, json],
+        { autoCommit: true },
+      );
+    } finally {
+      await connection.close();
+    }
   }
 
   async function loadDir(
@@ -276,6 +313,9 @@ export function createLoaderIntegrationHarness(): LoaderIntegrationHarness {
     getMajorVersion: () => majorVersion,
     makeTableName,
     pool: requirePool,
+    databaseConfig: requireConfig,
+    makeTempDir,
+    insertRawResource,
     writeNdjsonDir,
     loadDir,
     loadSample,
